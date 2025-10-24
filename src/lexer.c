@@ -18,7 +18,7 @@ static const KeywordEntry keywords[] = {
     {"nil", NIL},       {"not", NOT},       {"or", OR},
     {"repeat", REPEAT}, {"return", RETURN}, {"then", THEN},
     {"true", TRUE},     {"until", UNTIL},   {"while", WHILE},
-    {NULL, ILLEGAL}};
+    {NULL, ILLEGAL},    {"main", MAIN}};
 
 int fill_buffer(int bufno) {
   size_t idx = bufno * READBUFFER_SIZE;

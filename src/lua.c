@@ -2,6 +2,7 @@
 #define CODENAME LUA_PR
 
 #include "lexer.h"
+#include "parser.h"
 #include <stdio.h>
 
 void usage() { /* Display usage of the compiler with the options available */

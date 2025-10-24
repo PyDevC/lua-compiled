@@ -31,6 +31,7 @@ typedef enum {
   FALSE,
   FOR,
   FUNCTION,
+  MAIN,
   IF,
   IN_KEYWORD,
   LOCAL,

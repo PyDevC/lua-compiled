@@ -5,7 +5,6 @@
 #define TOTALREADBUFFER_SIZE 2 * READBUFFER_SIZE
 
 #include <stdio.h>
-#include <stdlib.h>
 
 typedef enum {
   LPAREN,

@@ -7,4 +7,4 @@ com:
 
 debug:
 	mkdir -p build
-	gcc -g -Wall src/*.c -o build/lua
+	gcc -g src/*.c -o build/lua

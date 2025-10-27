@@ -1,10 +1,14 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include <stdbool.h>
+
 /* Forward Declarations */
 typedef struct ExprNode ExprNode;
 typedef struct ExprNodeList ExprNodeList;
+typedef struct Field Field;
 typedef struct FieldList FieldList;
+typedef struct FuncCall FuncCall;
 typedef struct FuncBody FuncBody;
 typedef struct NameList NameList;
 typedef struct StatNode StatNode;
@@ -55,7 +59,7 @@ struct ExprNodeList {
   ExprNodeList *next;
 };
 
-struct Var {
+struct VarNode {
   enum { NameVar, IndexVar, MemberVar } type;
   union {
     char *name;
@@ -67,9 +71,9 @@ struct Var {
   } data;
 };
 
-struct VarList {
-  Var *var;
-  VarList *next;
+struct VarNodeList {
+  VarNode *var;
+  VarNodeList *next;
 };
 
 struct FuncBody {
@@ -178,7 +182,7 @@ struct StatNodeList {
 
 /* Helper functions for parsing each grammar rule */
 
-StatNode *parse_chunk(StatNode *chunk); /* This is the main node that should be exposed */
+StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
 
 // will add more helper function to parse all the grammar non-terminals
 

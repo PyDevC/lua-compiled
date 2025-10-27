@@ -1,9 +1,11 @@
 #define CLUA_VERSION 0.0.1
 #define CODENAME LUA_PR
 
+#include "errors.h"
 #include "lexer.h"
 #include "parser.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 void usage() { /* Display usage of the compiler with the options available */
   printf("lua [flags] [filename]\n");
@@ -16,13 +18,15 @@ int main(int argc, char **argv) {
     return 1;
   } else if (argc == 2) {
     char *filename = argv[1];
+    TraceStack *global_trace = malloc(sizeof(TraceStack));
+    init_trace_stack(global_trace);
     init_lexer(filename);
-    TokenStruct token;
-    do {
-      token = get_next_token();
-      printf("%s -> %d\n", token.literal, token.type);
-      free(token.literal);
-    } while (token.type != _EOF);
+    StatNodeList *chunk = parse_chunk();
+    StatNodeList *temp = chunk;
+    while (temp != NULL) {
+      printf("%d ", temp->stat->type);
+      temp = temp->next;
+    }
+    return 0;
   }
-  return 0;
 }

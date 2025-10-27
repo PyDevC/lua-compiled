@@ -2,6 +2,7 @@
 #include "errors.h"
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static FILE *f = NULL;
@@ -80,7 +81,7 @@ void skip_comments() {
 
 TokenStruct make_token(TokenType type) {
   unsigned int length = forward - lexeme_begin;
-  char *literal = (char *)malloc(length + 1);
+  char *literal = (char *)malloc(length);
   strncpy(literal, lexeme_begin, length);
   literal[length] = '\0';
   lexeme_begin = forward;
@@ -190,7 +191,6 @@ TokenStruct get_next_token() {
 int init_lexer(const char *filename) {
   f = fopen(filename, "r");
   if (!f) {
-    file_not_found(filename);
     return 1;
   }
   lexeme_begin = buffer;

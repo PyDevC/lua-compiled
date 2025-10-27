@@ -5,5 +5,3 @@ function main()
     local c = a + b
     return 0
 end
-print("Hello world")
-print(main())

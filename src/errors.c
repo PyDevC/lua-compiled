@@ -1,6 +1,8 @@
 #include "errors.h"
 #include <stdlib.h>
 
+TraceStack global_trace;
+
 void init_trace_stack(TraceStack *tracestack) {
   tracestack->callframes = NULL;
   tracestack->symbols = NULL;

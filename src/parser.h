@@ -36,7 +36,7 @@ struct ExprNode {
   union {
     double number_expr;
     char *string_expr;
-    VarNode *varg_expr;
+    VarNode *var_expr;
     FuncBody *funcdec_expr;
     FieldList *tableconst_expr;
 
@@ -183,6 +183,7 @@ struct StatNodeList {
 /* Helper functions for parsing each grammar rule */
 
 StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
+void traverse_ast_chunk(StatNodeList *list);
 
 // will add more helper function to parse all the grammar non-terminals
 

@@ -1,11 +1,10 @@
 #include "lexer.h"
-#include "errors.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static FILE *f = NULL;
+FILE *f = NULL;
 
 char buffer[TOTALREADBUFFER_SIZE + 1];
 char *lexeme_begin;
@@ -15,7 +14,7 @@ static const KeywordEntry keywords[] = {
     {"and", AND},       {"break", BREAK},   {"do", DO},
     {"else", ELSE},     {"elseif", ELSEIF}, {"end", END},
     {"false", FALSE},   {"for", FOR},       {"function", FUNCTION},
-    {"if", IF},         {"in", IN_KEYWORD}, {"local", LOCAL},
+    {"if", IF},         {"in", IN},         {"local", LOCAL},
     {"nil", NIL},       {"not", NOT},       {"or", OR},
     {"repeat", REPEAT}, {"return", RETURN}, {"then", THEN},
     {"true", TRUE},     {"until", UNTIL},   {"while", WHILE},
@@ -109,6 +108,14 @@ TokenStruct read_identifier() {
   return token;
 }
 
+TokenStruct read_number() {
+  while (isdigit(peek_next_char()) || peek_next_char() == '.') {
+    get_next_char();
+  }
+  TokenStruct token = make_token(LITERAL_NUMBER);
+  return token;
+}
+
 TokenStruct scantoken_symbol(char c) {
   TokenStruct token;
   switch (c) {
@@ -181,7 +188,7 @@ TokenStruct get_next_token() {
   if (isalpha(c) || c == '_') {
     return read_identifier();
   } else if (isdigit(c)) {
-    token = make_token(LITERAL_NUMBER);
+    return read_number();
   } else {
     token = scantoken_symbol(c);
   }

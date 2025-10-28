@@ -1,24 +1,17 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
-#if defined(DEBUG_LUA)
-#define D(X)                                                                   \
-  if (p->debug) {                                                              \
-    x;                                                                         \
-  }
+#define DEBUG_LUA
+#include <stdio.h>
 
+#if defined(DEBUG_LUA)
+#define D(x) x
 #else
-#define D()
+#define D(x)
 #endif
 
-#define E(x)                                                                   \
-  {                                                                            \
-    x;                                                                         \
-  }
-
+#define E(x) x
 #define MAX_TRACE_STACK_DEPTH 200
-
-#include <stdio.h>
 
 typedef struct CallFrame CallFrame;
 typedef struct Symbol Symbol;
@@ -44,6 +37,8 @@ typedef struct {
   size_t calltop;
   size_t symboltop;
 } TraceStack;
+
+extern TraceStack global_trace;
 
 void init_trace_stack(TraceStack *tracestack);
 

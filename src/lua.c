@@ -18,15 +18,11 @@ int main(int argc, char **argv) {
     return 1;
   } else if (argc == 2) {
     char *filename = argv[1];
-    TraceStack *global_trace = malloc(sizeof(TraceStack));
-    init_trace_stack(global_trace);
+    init_trace_stack(&global_trace);
     init_lexer(filename);
     StatNodeList *chunk = parse_chunk();
     StatNodeList *temp = chunk;
-    while (temp != NULL) {
-      printf("%d ", temp->stat->type);
-      temp = temp->next;
-    }
+    traverse_ast_chunk(temp);
     return 0;
   }
 }

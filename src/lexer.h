@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 
+extern FILE *f;
+
 typedef enum {
   LPAREN,
   RPAREN,
@@ -32,7 +34,7 @@ typedef enum {
   FUNCTION,
   MAIN,
   IF,
-  IN_KEYWORD,
+  IN,
   LOCAL,
   NIL,
   NOT,

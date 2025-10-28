@@ -12,8 +12,18 @@ StatNodeList *parse_stat_list();
 
 // For StatNode
 StatNode *parse_stat();
-void parse_return_stat(StatNode *stat);
+// void parse_return_stat(StatNode *stat);
 void parse_assingment_stat(StatNode *stat);
+void parse_localvarlist_stat(StatNode *stat);
+
+VarNodeList *parse_var_list();
+VarNode *parse_var();
+
+ExprNode *parse_expr();
+ExprNodeList *parse_expr_list();
+ExprNode *parse_unary_expr();
+ExprNode *parse_binary_expr();
+/*
 void parse_funccall_stat(StatNode *stat);
 void parse_dolike_block_stat(StatNode *stat);
 void parse_if_else_stat(StatNode *stat);
@@ -21,7 +31,6 @@ void parse_iteratorfor_stat(StatNode *stat);
 void parse_unpackfor_stat(StatNode *stat);
 void parse_functiondef_stat(StatNode *stat);
 void parse_localfunctiondef_stat(StatNode *stat);
-void parse_localvarlist_stat(StatNode *stat);
 
 // For Function
 FuncCall *parse_function_call();
@@ -32,15 +41,9 @@ Field *parse_field();
 FieldList *parse_field_list();
 
 // For Var
-VarNodeList *parse_var_list();
-VarNode *parse_var();
 
 // For Expr
-ExprNode *parse_expr();
-ExprNodeList *parse_expr_list();
-ExprNode *parse_unary_expr();
-ExprNode *parse_binary_expr();
-/*
+
 ExprNode* parse_table_construction_expr();
 ExprNode* parse_function_declaration_expr();
 ExprNode* parse_var_expr();
@@ -93,51 +96,56 @@ StatNode *parse_stat() {
   StatNode *stat = malloc(sizeof(StatNode));
   TokenStruct token = get_next_token();
   switch (token.type) {
-  case LOCAL:
-    token = get_next_token();
-    if (token.type == FUNCTION) {
-      parse_localfunctiondef_stat(stat);
-    } else if (token.type == IDENTIFIER) {
-      parse_localvarlist_stat(stat);
-    }
-    break;
+    /*
+    case LOCAL:
+      token = get_next_token();
+      if (token.type == FUNCTION) {
+        parse_localfunctiondef_stat(stat);
+      } else if (token.type == IDENTIFIER) {
+        parse_localvarlist_stat(stat);
+      }
+      break;
 
-  case FUNCTION:
+    case FUNCTION:
     parse_functiondef_stat(stat);
     break;
 
-  case DO:
+    case DO:
     stat->type = DoBlockStat;
     parse_dolike_block_stat(stat);
     break;
 
-  case WHILE:
+    case WHILE:
     stat->type = WhileBlockStat;
     parse_dolike_block_stat(stat);
     break;
-  case REPEAT:
+    case REPEAT:
     stat->type = RepeatBlockStat;
     parse_dolike_block_stat(stat);
     break;
-  case IF:
+    case IF:
     parse_if_else_stat(stat);
     break;
+    */
+
   case IDENTIFIER:
     token = get_next_token();
-    if (token.type == LBRACE) {
-      parse_funccall_stat(stat);
-    } else if (token.type == EQUAL) {
-      parse_assingment_stat(stat);
-    }
+    // if (token.type == LBRACE) {
+    //  parse_funccall_stat(stat);
+    // } else if (token.type == EQUAL) {
+    parse_assingment_stat(stat);
+    //}
     break;
-  case RETURN:
-    parse_return_stat(stat);
+    /*
+case RETURN:
+parse_return_stat(stat);
+*/
   default:
     break;
   }
   return stat;
 }
-
+/*
 void parse_return_stat(StatNode *stat) {
   stat->type = ReturnStat;
   stat->data.return_stat = parse_expr_list();
@@ -205,7 +213,7 @@ FuncCall *parse_function_call() {
   FuncCall *call = malloc(sizeof(FuncBody));
   return call;
 }
-
+*/
 ExprNode *parse_expr() {
   ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode *));
   TokenStruct token = get_next_token();

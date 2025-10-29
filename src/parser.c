@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 
+static TokenStruct global_token;
 /* Helper Functions Forward Declaration */
 
 // For StatNodeList
@@ -65,7 +66,8 @@ StatNodeList *create_empty_chunk() {
 StatNodeList *parse_chunk() {
   StatNodeList *chunk = create_empty_chunk();
   StatNodeList *temp = NULL;
-  TokenStruct token = get_next_token();
+  global_token = get_next_token();
+  TokenStruct token = global_token;
   while (1) {
     if (token.type == _EOF || token.type == END || token.type == RETURN ||
         token.type == UNTIL || token.type == ELSEIF || token.type == ELSE) {
@@ -88,14 +90,14 @@ StatNodeList *parse_chunk() {
       }
     }
     token = get_next_token();
+    global_token = token;
   }
   return chunk;
 }
 
 StatNode *parse_stat() {
   StatNode *stat = malloc(sizeof(StatNode));
-  TokenStruct token = get_next_token();
-  switch (token.type) {
+  switch (global_token.type) {
     /*
     case LOCAL:
       token = get_next_token();
@@ -129,7 +131,6 @@ StatNode *parse_stat() {
     */
 
   case IDENTIFIER:
-    token = get_next_token();
     // if (token.type == LBRACE) {
     //  parse_funccall_stat(stat);
     // } else if (token.type == EQUAL) {
@@ -151,11 +152,6 @@ void parse_return_stat(StatNode *stat) {
   stat->data.return_stat = parse_expr_list();
 }
 
-void parse_assingment_stat(StatNode *stat) {
-  stat->type = AssignmentStat;
-  stat->data.assingment_stat.varlist = parse_var_list();
-  stat->data.assingment_stat.exprlist = parse_expr_list();
-}
 
 void parse_funccall_stat(StatNode *stat) {
   stat->type = FuncCallStat;
@@ -214,12 +210,28 @@ FuncCall *parse_function_call() {
   return call;
 }
 */
+
+void parse_assingment_stat(StatNode *stat) {
+  stat->type = AssignmentStat;
+  stat->data.assingment_stat.varlist = parse_var_list();
+  TokenStruct token = get_next_token();
+  if (token.type == EQUAL) {
+    stat->data.assingment_stat.exprlist = parse_expr_list();
+  } else {
+    E(fprintf(stderr, "Syntax Error: Expected = symbol but got %s",
+              token.literal));
+  }
+}
+
 ExprNode *parse_expr() {
   ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode *));
   TokenStruct token = get_next_token();
   if (token.type == LITERAL_NUMBER) {
     expr->type = NumberExpr;
     expr->data.number_expr = (double)atoi(token.literal);
+  } else {
+    E(fprintf(stderr, "Syntax Error: Expeacted a number literal but got %s",
+              token.literal));
   }
   return expr;
 }
@@ -238,9 +250,8 @@ VarNodeList *parse_var_list() {
 
 VarNode *parse_var() {
   VarNode *var = (VarNode *)malloc(sizeof(VarNode *));
-  TokenStruct token = get_next_token();
   var->type = NameVar;
-  var->data.name = token.literal;
+  var->data.name = global_token.literal;
   return var;
 }
 

@@ -1,11 +1,11 @@
 #define CLUA_VERSION 0.0.1
 #define CODENAME LUA_PR
 
+#include "codegen.h"
 #include "errors.h"
 #include "lexer.h"
 #include "parser.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 void usage() { /* Display usage of the compiler with the options available */
   printf("lua [flags] [filename]\n");

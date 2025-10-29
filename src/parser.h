@@ -77,7 +77,7 @@ struct VarNodeList {
 };
 
 struct FuncBody {
-  NameList *paralist;
+  VarNodeList *paralist;
   StatNodeList *block;
 };
 
@@ -166,7 +166,7 @@ struct StatNode {
     } localfunctiondef_stat;
 
     struct {
-      NameList *namelist;
+      VarNodeList *namelist;
       ExprNodeList *explist;
     } localvarlist_stat;
 

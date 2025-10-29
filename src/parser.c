@@ -16,6 +16,9 @@ StatNode *parse_stat();
 // void parse_return_stat(StatNode *stat);
 void parse_assingment_stat(StatNode *stat);
 void parse_localvarlist_stat(StatNode *stat);
+void parse_localfunctiondef_stat(StatNode *stat);
+
+FuncBody *parse_function_body();
 
 VarNodeList *parse_var_list();
 VarNode *parse_var();
@@ -31,11 +34,9 @@ void parse_if_else_stat(StatNode *stat);
 void parse_iteratorfor_stat(StatNode *stat);
 void parse_unpackfor_stat(StatNode *stat);
 void parse_functiondef_stat(StatNode *stat);
-void parse_localfunctiondef_stat(StatNode *stat);
 
 // For Function
 FuncCall *parse_function_call();
-FuncBody *parse_function_body();
 
 // For Field
 Field *parse_field();
@@ -97,38 +98,39 @@ StatNodeList *parse_chunk() {
 
 StatNode *parse_stat() {
   StatNode *stat = malloc(sizeof(StatNode));
+  TokenStruct token;
   switch (global_token.type) {
+  case LOCAL:
+    token = get_next_token();
+    if (token.type == FUNCTION) {
+      parse_localfunctiondef_stat(stat);
+    } else if (token.type == IDENTIFIER) {
+      global_token = token;
+      parse_localvarlist_stat(stat);
+    }
+    break;
     /*
-    case LOCAL:
-      token = get_next_token();
-      if (token.type == FUNCTION) {
-        parse_localfunctiondef_stat(stat);
-      } else if (token.type == IDENTIFIER) {
-        parse_localvarlist_stat(stat);
-      }
-      break;
+        case FUNCTION:
+        parse_functiondef_stat(stat);
+        break;
 
-    case FUNCTION:
-    parse_functiondef_stat(stat);
-    break;
+        case DO:
+        stat->type = DoBlockStat;
+        parse_dolike_block_stat(stat);
+        break;
 
-    case DO:
-    stat->type = DoBlockStat;
-    parse_dolike_block_stat(stat);
-    break;
-
-    case WHILE:
-    stat->type = WhileBlockStat;
-    parse_dolike_block_stat(stat);
-    break;
-    case REPEAT:
-    stat->type = RepeatBlockStat;
-    parse_dolike_block_stat(stat);
-    break;
-    case IF:
-    parse_if_else_stat(stat);
-    break;
-    */
+        case WHILE:
+        stat->type = WhileBlockStat;
+        parse_dolike_block_stat(stat);
+        break;
+        case REPEAT:
+        stat->type = RepeatBlockStat;
+        parse_dolike_block_stat(stat);
+        break;
+        case IF:
+        parse_if_else_stat(stat);
+        break;
+        */
 
   case IDENTIFIER:
     // if (token.type == LBRACE) {
@@ -195,15 +197,7 @@ void parse_functiondef_stat(StatNode *stat) {
   stat->data.functiondef_stat.body = parse_function_body();
 }
 
-FuncBody *parse_function_body() {
-  FuncBody *body = malloc(sizeof(FuncBody));
-  return body;
-}
 
-void parse_localfunctiondef_stat(StatNode *stat) {
-  TokenStruct token = get_next_token();
-}
-void parse_localvarlist_stat(StatNode *stat) {}
 
 FuncCall *parse_function_call() {
   FuncCall *call = malloc(sizeof(FuncBody));
@@ -214,13 +208,29 @@ FuncCall *parse_function_call() {
 void parse_assingment_stat(StatNode *stat) {
   stat->type = AssignmentStat;
   stat->data.assingment_stat.varlist = parse_var_list();
+  stat->data.assingment_stat.exprlist = parse_expr_list();
+}
+
+void parse_localfunctiondef_stat(StatNode *stat) {
   TokenStruct token = get_next_token();
-  if (token.type == EQUAL) {
-    stat->data.assingment_stat.exprlist = parse_expr_list();
+  if (token.type == LPAREN) {
+    stat->data.localfunctiondef_stat.body = parse_function_body();
+  } else if (token.type == IDENTIFIER) {
+    stat->type = LocalFunctionDefStat;
+    stat->data.localfunctiondef_stat.name = token.literal;
+    token = get_next_token();
+    if (token.type == LPAREN) {
+      stat->data.localfunctiondef_stat.body = parse_function_body();
+    }
   } else {
-    E(fprintf(stderr, "Syntax Error: Expected = symbol but got %s",
-              token.literal));
+    E(fprintf(stderr, "Syntax Error: Expected ) but got %s", token.literal));
   }
+}
+
+void parse_localvarlist_stat(StatNode *stat) {
+  stat->type = LocalVarListDefStat;
+  stat->data.localvarlist_stat.namelist = parse_var_list();
+  stat->data.localvarlist_stat.explist = parse_expr_list();
 }
 
 ExprNode *parse_expr() {
@@ -244,7 +254,24 @@ ExprNodeList *parse_expr_list() {
 
 VarNodeList *parse_var_list() {
   VarNodeList *varlist = (VarNodeList *)malloc(sizeof(VarNodeList *));
-  varlist->var = parse_var();
+  VarNodeList *temp = varlist;
+  TokenStruct token = get_next_token();
+  temp->var = parse_var();
+  while (1) {
+    if (token.type == EQUAL || (token.type == RPAREN)) {
+      break;
+    } else if (token.type == IDENTIFIER) {
+      global_token = token;
+      temp->next->var = parse_var();
+      temp = temp->next;
+    } else if (token.type == COMMA) {
+      token = get_next_token();
+    } else {
+      E(fprintf(stderr, "Syntax Error: Expected = or a identifier but got %s",
+                token.literal));
+      break;
+    }
+  }
   return varlist;
 }
 
@@ -253,6 +280,13 @@ VarNode *parse_var() {
   var->type = NameVar;
   var->data.name = global_token.literal;
   return var;
+}
+
+FuncBody *parse_function_body() {
+  FuncBody *body = malloc(sizeof(FuncBody));
+  body->paralist = parse_var_list();
+  body->block = parse_chunk();
+  return body;
 }
 
 /* Traversal Functions */

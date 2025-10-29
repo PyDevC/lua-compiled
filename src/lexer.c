@@ -140,6 +140,9 @@ TokenStruct scantoken_symbol(char c) {
   case ';':
     token = make_token(SEMICOLON);
     break;
+  case ',':
+    token = make_token(COMMA);
+    break;
   case '~':
     if (get_next_char() == '=') {
       token = make_token(NOT_EQUAL);

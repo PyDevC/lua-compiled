@@ -15,42 +15,34 @@
 
 typedef struct CallFrame CallFrame;
 typedef struct Symbol Symbol;
+typedef struct TraceStack TraceStack;
 
 struct CallFrame {
   const char *functioncall;
   const char *filename;
   size_t line_number;
-  CallFrame *back;
+  TraceStack *next;
 };
 
 struct Symbol {
   const char *symbolname;
-  const char *type;
   const char *filename;
   size_t line_number;
-  Symbol *back;
+  TraceStack *next;
 };
 
-typedef struct {
-  CallFrame *callframes;
-  Symbol *symbols;
-  size_t calltop;
-  size_t symboltop;
-} TraceStack;
+struct TraceStack {
+  enum { CALL, SYM } type;
+  size_t level;
 
-extern TraceStack global_trace;
+  union {
+    CallFrame *callframes;
+    Symbol *symbols;
+  } frame;
+};
+
+extern TraceStack global_tracestack;
 
 void init_trace_stack(TraceStack *tracestack);
-
-void tracestack_push_frame(TraceStack *tracestack, const char *functioncall,
-                           const char *filename, size_t line_number);
-CallFrame tracestack_peek_frame(TraceStack *tracestack);
-void tracestack_pop_frame(TraceStack *tracestack);
-
-void tracestack_push_symbol(TraceStack *tracestack, const char *symbolname,
-                            const char *type, const char *filename,
-                            size_t line_number);
-Symbol tracestack_peek_symbol(TraceStack *tracestack);
-void tracestack_pop_symbol(TraceStack *tracestack);
 
 #endif // ERRORS_H

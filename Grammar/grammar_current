@@ -1,0 +1,19 @@
+	chunk ::= {stat [`;´]}
+
+	block ::= chunk
+
+	stat ::=  var `=´ exp | 
+		 local Name [`=´ exp] 
+
+	var ::=  Name
+
+	exp ::=  nil | false | true | Number | String |
+		 prefixexp | exp binop exp | unop exp 
+
+	prefixexp ::= var | `(´ exp `)´
+
+	binop ::= `+´ | `-´ | `*´ | `/´ | `^´ | `%´ | `..´ | 
+		 `<´ | `<=´ | `>´ | `>=´ | `==´ | `~=´ | 
+		 and | or
+
+	unop ::= `-´ | not | `#´

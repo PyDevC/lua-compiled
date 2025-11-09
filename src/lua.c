@@ -18,11 +18,10 @@ int main(int argc, char **argv) {
     return 1;
   } else if (argc == 2) {
     char *filename = argv[1];
-    init_trace_stack(&global_trace);
+    init_trace_stack(&global_tracestack);
     init_lexer(filename);
     StatNodeList *chunk = parse_chunk();
     StatNodeList *temp = chunk;
-    traverse_ast_chunk(temp);
     return 0;
   }
 }

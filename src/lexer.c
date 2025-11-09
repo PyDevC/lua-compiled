@@ -153,6 +153,9 @@ TokenStruct scantoken_symbol(char c) {
   case '!':
     token = make_token(BANG);
     break;
+  case '#':
+    token = make_token(HASH);
+    break;
   case '+':
     token = make_token(ADD);
     break;

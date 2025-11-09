@@ -21,6 +21,7 @@ typedef enum {
   NOT_EQUAL,
   BANG,
   COMMA,
+  HASH,
   LITERAL_NUMBER,
   LITERAL_STRING,
   IDENTIFIER,

@@ -1,7 +1,6 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
-#define DEBUG_LUA
 #include <stdio.h>
 
 #if defined(DEBUG_LUA)

@@ -11,13 +11,10 @@ CC=gcc
 flags=-Wall
 DEBUG=-g 
 
-all: set com
+.PHONY: all build
 
-set:
+all: build
+
+build:
 	mkdir -p build
-
-com:
 	$(CC) $(CC_WARNING) $(flags) src/*.c -o build/lua
-
-debug:
-	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o build/lua

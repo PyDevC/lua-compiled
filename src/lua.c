@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     init_trace_stack(&global_tracestack);
     init_lexer(filename);
     StatNodeList *chunk = parse_chunk();
-    StatNodeList *temp = chunk;
+    printf("%d ", chunk->stat->type);
     return 0;
   }
 }

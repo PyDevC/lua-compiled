@@ -1,7 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#define READBUFFER_SIZE 4096 // 4kb
+#define READBUFFER_SIZE 12 // 4kb
 #define TOTALREADBUFFER_SIZE 2 * READBUFFER_SIZE
 
 #include <stdio.h>

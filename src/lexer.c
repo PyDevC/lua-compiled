@@ -6,10 +6,11 @@
 
 FILE *f = NULL;
 
-char buffer[TOTALREADBUFFER_SIZE + 1];
+char buffer[TOTALREADBUFFER_SIZE + 1]; /* Buffer window to store blocks of source code */
 char *lexeme_begin;
 char *forward;
 
+/* Keywords with their token name, tokens defines in lexer.h */
 static const KeywordEntry keywords[] = {
     {"and", AND},       {"break", BREAK},   {"do", DO},
     {"else", ELSE},     {"elseif", ELSEIF}, {"end", END},
@@ -21,16 +22,16 @@ static const KeywordEntry keywords[] = {
     {NULL, ILLEGAL},    {"main", MAIN}};
 
 int fill_buffer(int bufno) {
-  size_t idx = bufno * READBUFFER_SIZE;
+  int idx = bufno * READBUFFER_SIZE;
   size_t read_counter = fread(&buffer[idx], 1, READBUFFER_SIZE, f);
-  buffer[idx + read_counter] = '\0';
+  buffer[idx + (int)read_counter] = '\0';
   if (read_counter < READBUFFER_SIZE) {
     return 0;
   }
   return 1;
 }
 
-int get_next_char() {
+char get_next_char() {
   char c = *forward;
   if (c == '\0') {
     int bufno = (forward >= &buffer[READBUFFER_SIZE]) ? 1 : 0;
@@ -46,7 +47,7 @@ int get_next_char() {
     c = *forward;
   }
   forward++;
-  return (int)c;
+  return c;
 }
 
 int peek_next_char() { return *forward; }
@@ -79,9 +80,9 @@ void skip_comments() {
 }
 
 TokenStruct make_token(TokenType type) {
-  unsigned int length = forward - lexeme_begin;
-  char *literal = (char *)malloc(length);
-  strncpy(literal, lexeme_begin, length);
+  long int length = forward - lexeme_begin;
+  char *literal = (char *)malloc((size_t)length);
+  strncpy(literal, lexeme_begin, (size_t)length);
   literal[length] = '\0';
   lexeme_begin = forward;
   return (TokenStruct){.type = type, .literal = literal};

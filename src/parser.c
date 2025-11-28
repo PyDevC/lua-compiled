@@ -141,7 +141,7 @@ ExprNode *parse_expr() {
     break;
   case LITERAL_STRING:
     expr->type = StringExpr;
-    expr->data.string_expr = token.literal;
+    expr->data.string_expr = global_token.literal;
     break;
   case IDENTIFIER:
   case LPAREN:
@@ -151,7 +151,7 @@ ExprNode *parse_expr() {
   case SUB:
   case NOT:
   case HASH:
-    parse_unaryop_expr(expr, token.type);
+    parse_unaryop_expr(expr, global_token.type);
     break;
   default:
     E(fprintf(stderr, "Syntax Error: Token Type should be a one of ExprType"));

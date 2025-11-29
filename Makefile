@@ -9,7 +9,7 @@ CC_WARNING=-fmax-errors=$(WARN_LIMIT) \
 
 CC=gcc
 flags=-Wall
-DEBUG=-g 
+DEBUG=-g -DDEBUG_LUA=1
 
 .PHONY: all build
 
@@ -18,3 +18,7 @@ all: build
 build:
 	mkdir -p build
 	$(CC) $(CC_WARNING) $(flags) src/*.c -o build/lua
+
+debug: 
+	mkdir -p build
+	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o build/lua

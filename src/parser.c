@@ -73,8 +73,9 @@ StatNode *parse_stat() {
     parse_localvar_stat(stat);
     break;
   default:
-    E(fprintf(stderr, "Syntax Error: Token does not match for the statement %d",
-              global_token.type));
+    E(fprintf(stderr,
+              "Syntax Error: Token does not match for the statement %d: %s\n",
+              global_token.type, global_token.literal));
     exit(1);
   };
   return stat;
@@ -209,4 +210,5 @@ void parse_prefix_expr(ExprNode *expr) {
   expr->data.prefix_expr_var = (VarNode *)malloc(sizeof(VarNode *));
   expr->data.prefix_expr_var->name = global_token.literal;
   expr->data.prefix_expr_var->type = NameVar;
+  global_token = get_next_token();
 }

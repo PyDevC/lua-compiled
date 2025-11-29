@@ -1,7 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#define READBUFFER_SIZE 12 // 4kb
+#define READBUFFER_SIZE 16 // 16 bytes
 #define TOTALREADBUFFER_SIZE 2 * READBUFFER_SIZE
 
 #include <stdio.h>
@@ -72,5 +72,20 @@ int init_lexer(const char *filename);
 // alright but 1 means that something went wrong
 
 TokenStruct get_next_token();
+
+#ifdef DEBUG_LUA
+
+char get_next_char();
+int peek_next_char();
+void skip_whitespaces();
+void skip_comments();
+TokenStruct make_token(TokenType);
+TokenType read_keyword(const char *);
+TokenStruct read_identifier();
+TokenStruct read_number();
+TokenStruct scantoken_symbol(char);
+TokenStruct get_next_token();
+
+#endif // DEBUG_LUA
 
 #endif // LEXER_H

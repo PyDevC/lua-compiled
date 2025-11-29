@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "errors.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,9 +7,24 @@
 
 FILE *f = NULL;
 
-char buffer[TOTALREADBUFFER_SIZE + 1]; /* Buffer window to store blocks of source code */
-char *lexeme_begin;
-char *forward;
+/* Buffer window to store blocks of source code */
+char buffer[TOTALREADBUFFER_SIZE + 1];
+char *lexeme_begin; /* Gets updated after previous token is captured */
+char *forward;      /* Gets update with every character */
+int linenumber;     /*Keeping this global for now but there might be better way
+                          to do this*/
+int colnumber;      /*Same for this*/
+
+/*
+ * Setup the Location pointer to the source for any errors that occur
+ *
+ * E(fprintf(stderr, "Syntax Error: At line: %d\n%s\n%s\n", token.linenumber,
+ * token.literal, ErrorMsg));
+ *
+ * D(fprintf(stdout, "DEBUG: At line: 49 -> Value of char c in get_next_char:
+ * %c\n", c));
+ *
+ */
 
 /* Keywords with their token name, tokens defines in lexer.h */
 static const KeywordEntry keywords[] = {
@@ -28,11 +44,23 @@ int fill_buffer(int bufno) {
   if (read_counter < READBUFFER_SIZE) {
     return 0;
   }
+
+  D(fprintf(stdout,
+            "DEBUG: At line: %d, colnum: %d, fill_buffer -> Value of buffer: "
+            "%s\n, Buffer Length: %d\n",
+            linenumber, colnumber, buffer, (int)read_counter));
+
   return 1;
 }
 
 char get_next_char() {
   char c = *forward;
+
+  D(fprintf(
+      stdout,
+      "DEBUG: At line: %d, colnum: %d, get_next_char -> Value of forward: %s\n",
+      linenumber, colnumber, forward));
+
   if (c == '\0') {
     int bufno = (forward >= &buffer[READBUFFER_SIZE]) ? 1 : 0;
     if (bufno == 0) {
@@ -47,6 +75,7 @@ char get_next_char() {
     c = *forward;
   }
   forward++;
+  colnumber++;
   return c;
 }
 
@@ -56,6 +85,10 @@ void skip_whitespaces() {
   char c;
   do {
     c = get_next_char();
+    if (c == '\n') {
+      linenumber++;
+      colnumber = 0;
+    }
   } while (c == ' ' || c == '\t' || c == '\n' || c == '\r');
   forward--;
   lexeme_begin = forward;
@@ -63,16 +96,34 @@ void skip_whitespaces() {
 
 void skip_comments() {
   char c;
-  // for single line: lets not support multiline comment yet
   c = get_next_char();
   if (c == '-') {
     if (peek_next_char() == '-') {
-      while (c != '\n') {
-        c = get_next_char();
+      /* Skipping for multiline comment */
+      c = get_next_char();
+      if (c == '[') {
+        if (peek_next_char() == '[') {
+          while (c != ']' && peek_next_char() == ']') {
+            c = get_next_char();
+            if (c == '\n') {
+              linenumber++;
+              colnumber = 0;
+            }
+          }
+        } else {
+          return;
+        }
+      } else {
+        /* Skipping Single line comment */
+        while (c != '\n') {
+          c = get_next_char();
+        }
+        linenumber++;
+        colnumber = 0;
+        forward--;
+        lexeme_begin = forward;
+        return;
       }
-      forward--;
-      lexeme_begin = forward;
-      return;
     }
   }
   forward--;
@@ -209,6 +260,8 @@ int init_lexer(const char *filename) {
   }
   lexeme_begin = buffer;
   forward = buffer;
+  linenumber = 1;
+  colnumber = 0;
   fill_buffer(0);
   fill_buffer(1);
   return 0;

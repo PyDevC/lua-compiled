@@ -40,7 +40,7 @@ int fill_buffer(int bufno);
 
 char get_next_char();
 char peek_next_char();
-void skip_whitespaces();
+int skip_whitespaces();
 
 TokenStruct make_token(TokenType type);
 TokenType read_keyword(const char *identifier_literal);
@@ -96,12 +96,14 @@ char get_next_char() {
 
 char peek_next_char() { return *forward; }
 
-void skip_whitespaces() {
+int skip_whitespaces() {
   char c = get_next_char();
+  int was_whitespace = 0;
   while (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+    was_whitespace++;
     c = get_next_char();
   }
-  forward--;
+  return was_whitespace;
 }
 
 TokenStruct make_token(TokenType type) {
@@ -211,18 +213,25 @@ TokenStruct scantoken_symbol(char c) {
 }
 
 TokenStruct get_next_token() {
-  TokenStruct token = {0};
-  skip_whitespaces();
+  TokenStruct token = {0}; /* First time the TokenType should be illegal */
+  int was_whitespace = skip_whitespaces();
+  char c;
+
+  if (was_whitespace) {
+    c = peek_next_char();
+  } else {
+    c = get_next_char();
+  }
+
   lexeme_begin = forward;
-  char c = get_next_char();
   if (c == EOF) {
     token = make_token(_EOF);
     return token;
   }
   if (is_identifier_start(c)) {
-    return read_identifier();
+    token = read_identifier();
   } else if (is_number_char(c)) {
-    return read_number();
+    token = read_number();
   } else {
     token = scantoken_symbol(c);
   }

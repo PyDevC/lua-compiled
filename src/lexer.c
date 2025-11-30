@@ -26,15 +26,14 @@ int colnumber;      /*Same for this*/
 
 /* Keywords with their token name, tokens defines in lexer.h */
 static const KeywordEntry keywords[] = {
-    {"and", AND},       {"break", BREAK},   {"do", DO},
-    {"else", ELSE},     {"elseif", ELSEIF}, {"end", END},
-    {"false", FALSE},   {"for", FOR},       {"function", FUNCTION},
-    {"if", IF},         {"in", IN},         {"local", LOCAL},
-    {"nil", NIL},       {"not", NOT},       {"or", OR},
-    {"repeat", REPEAT}, {"return", RETURN}, {"then", THEN},
-    {"true", TRUE},     {"until", UNTIL},   {"while", WHILE},
-    {NULL, ILLEGAL},    {"main", MAIN}};
-
+    {AND, "and"},       {BREAK, "break"},   {DO, "do"},
+    {ELSE, "else"},     {ELSEIF, "elseif"}, {END, "end"},
+    {FALSE, "false"},   {FOR, "for"},       {FUNCTION, "function"},
+    {IF, "if"},         {IN, "in"},         {LOCAL, "local"},
+    {NIL, "nil"},       {NOT, "not"},       {OR, "or"},
+    {REPEAT, "repeat"}, {RETURN, "return"}, {THEN, "then"},
+    {TRUE, "true"},     {UNTIL, "until"},   {WHILE, "while"},
+    {ILLEGAL, NULL}};
 
 /* Function Declarations */
 int fill_buffer(int bufno);

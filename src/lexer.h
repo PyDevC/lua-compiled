@@ -9,23 +9,22 @@
 extern FILE *f;
 
 typedef enum {
-  LPAREN,
+  ILLEGAL, /* 0 *//* ILLEGAL should be first */
+  _EOF,
+  COMMA,
+  HASH,
+  LPAREN, /* 4 *//* Control Flow symbols */
   RPAREN,
   LBRACE,
   RBRACE,
   LBRACKET,
   RBRACKET,
   SEMICOLON,
-  EQUAL,
+  EQUAL, /* 12 *//* Comparision Symbols */
   EQUAL_EQUAL,
   NOT_EQUAL,
   BANG,
-  COMMA,
-  HASH,
-  LITERAL_NUMBER,
-  LITERAL_STRING,
-  IDENTIFIER,
-  AND,
+  AND, /* 16 *//* 22 Keywords */
   BREAK,
   DO,
   ELSE,
@@ -47,12 +46,13 @@ typedef enum {
   TRUE,
   UNTIL,
   WHILE,
-  ADD,
+  ADD, /* 38 *//* Arithmetic Symbols */
   SUB,
   MUL,
   DIV,
-  _EOF,
-  ILLEGAL
+  LITERAL_NUMBER, /* 42 *//* Misc */
+  LITERAL_STRING,
+  IDENTIFIER,
 } TokenType;
 
 typedef struct TokenStruct {

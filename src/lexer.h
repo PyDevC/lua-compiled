@@ -73,19 +73,4 @@ int init_lexer(const char *filename);
 
 TokenStruct get_next_token();
 
-#ifdef DEBUG_LUA
-
-char get_next_char();
-int peek_next_char();
-void skip_whitespaces();
-void skip_comments();
-TokenStruct make_token(TokenType);
-TokenType read_keyword(const char *);
-TokenStruct read_identifier();
-TokenStruct read_number();
-TokenStruct scantoken_symbol(char);
-TokenStruct get_next_token();
-
-#endif // DEBUG_LUA
-
 #endif // LEXER_H

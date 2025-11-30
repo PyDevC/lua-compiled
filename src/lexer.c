@@ -1,9 +1,18 @@
 #include "lexer.h"
 #include "errors.h"
-#include <ctype.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define is_identifier_start(c)                                                 \
+  ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
+
+#define is_identifier_char(c)                                                  \
+  ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||                         \
+   (c >= '0' && c <= '9') || c == '_')
+
+#define is_number_char(c) ((c >= '0' && c <= '9') || (c == '.'))
 
 FILE *f = NULL;
 
@@ -14,17 +23,6 @@ char *forward;      /* Gets update with every character */
 int linenumber;     /*Keeping this global for now but there might be better way
                           to do this*/
 int colnumber;      /*Same for this*/
-
-/*
- * Setup the Location pointer to the source for any errors that occur
- *
- * E(fprintf(stderr, "Syntax Error: At line: %d\n%s\n%s\n", token.linenumber,
- * token.literal, ErrorMsg));
- *
- * D(fprintf(stdout, "DEBUG: At line: 49 -> Value of char c in get_next_char:
- * %c\n", c));
- *
- */
 
 /* Keywords with their token name, tokens defines in lexer.h */
 static const KeywordEntry keywords[] = {
@@ -37,18 +35,35 @@ static const KeywordEntry keywords[] = {
     {"true", TRUE},     {"until", UNTIL},   {"while", WHILE},
     {NULL, ILLEGAL},    {"main", MAIN}};
 
+
+/* Function Declarations */
+int fill_buffer(int bufno);
+
+char get_next_char();
+char peek_next_char();
+void skip_whitespaces();
+
+TokenStruct make_token(TokenType type);
+TokenType read_keyword(const char *identifier_literal);
+
+TokenStruct read_identifier();
+TokenStruct read_number();
+TokenStruct scantoken_symbol(char c);
+TokenStruct get_next_token();
+
+/* Function Definitions */
+
 int fill_buffer(int bufno) {
   int idx = bufno * READBUFFER_SIZE;
   size_t read_counter = fread(&buffer[idx], 1, READBUFFER_SIZE, f);
+
   buffer[idx + (int)read_counter] = '\0';
+  /*Ending should be NULL character to determine whether we have
+             reached end of buffer or not*/
+
   if (read_counter < READBUFFER_SIZE) {
     return 0;
   }
-
-  D(fprintf(stdout,
-            "DEBUG: At line: %d, colnum: %d, fill_buffer -> Value of buffer: "
-            "%s\n, Buffer Length: %d\n",
-            linenumber, colnumber, buffer, (int)read_counter));
 
   return 1;
 }
@@ -56,12 +71,8 @@ int fill_buffer(int bufno) {
 char get_next_char() {
   char c = *forward;
 
-  D(fprintf(
-      stdout,
-      "DEBUG: At line: %d, colnum: %d, get_next_char -> Value of forward: %s\n",
-      linenumber, colnumber, forward));
-
   if (c == '\0') {
+    /* Here bufno shows what part of buffer we are at */
     int bufno = (forward >= &buffer[READBUFFER_SIZE]) ? 1 : 0;
     if (bufno == 0) {
       forward = &buffer[READBUFFER_SIZE];
@@ -76,58 +87,22 @@ char get_next_char() {
   }
   forward++;
   colnumber++;
+  if (c == '\n') {
+    linenumber++;
+    colnumber = 0;
+  }
+
   return c;
 }
 
-int peek_next_char() { return *forward; }
+char peek_next_char() { return *forward; }
 
 void skip_whitespaces() {
-  char c;
-  do {
+  char c = get_next_char();
+  while (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
     c = get_next_char();
-    if (c == '\n') {
-      linenumber++;
-      colnumber = 0;
-    }
-  } while (c == ' ' || c == '\t' || c == '\n' || c == '\r');
-  forward--;
-  lexeme_begin = forward;
-}
-
-void skip_comments() {
-  char c;
-  c = get_next_char();
-  if (c == '-') {
-    if (peek_next_char() == '-') {
-      /* Skipping for multiline comment */
-      c = get_next_char();
-      if (c == '[') {
-        if (peek_next_char() == '[') {
-          while (c != ']' && peek_next_char() == ']') {
-            c = get_next_char();
-            if (c == '\n') {
-              linenumber++;
-              colnumber = 0;
-            }
-          }
-        } else {
-          return;
-        }
-      } else {
-        /* Skipping Single line comment */
-        while (c != '\n') {
-          c = get_next_char();
-        }
-        linenumber++;
-        colnumber = 0;
-        forward--;
-        lexeme_begin = forward;
-        return;
-      }
-    }
   }
   forward--;
-  lexeme_begin = forward;
 }
 
 TokenStruct make_token(TokenType type) {
@@ -149,10 +124,7 @@ TokenType read_keyword(const char *identifier_literal) {
 }
 
 TokenStruct read_identifier() {
-  while (isalnum(peek_next_char()) || peek_next_char() == '_') {
-    if (peek_next_char() == ' ' || peek_next_char() == '\n') {
-      break;
-    }
+  while (is_identifier_char(peek_next_char())) {
     get_next_char();
   }
   TokenStruct token = make_token(IDENTIFIER);
@@ -161,7 +133,12 @@ TokenStruct read_identifier() {
 }
 
 TokenStruct read_number() {
-  while (isdigit(peek_next_char()) || peek_next_char() == '.') {
+  int is_floating = 0; /* 1 if number is floating */
+  while (is_number_char(peek_next_char())) {
+    if (peek_next_char() == '.' && is_floating) {
+      E(fprintf(stderr, "Syntax Error: Expected Number but got %c",
+                peek_next_char()));
+    }
     get_next_char();
   }
   TokenStruct token = make_token(LITERAL_NUMBER);
@@ -236,16 +213,16 @@ TokenStruct scantoken_symbol(char c) {
 
 TokenStruct get_next_token() {
   TokenStruct token = {0};
-  skip_comments(); // this should always be above skip_whitespaces
   skip_whitespaces();
+  lexeme_begin = forward;
   char c = get_next_char();
   if (c == EOF) {
     token = make_token(_EOF);
     return token;
   }
-  if (isalpha(c) || c == '_') {
+  if (is_identifier_start(c)) {
     return read_identifier();
-  } else if (isdigit(c)) {
+  } else if (is_number_char(c)) {
     return read_number();
   } else {
     token = scantoken_symbol(c);

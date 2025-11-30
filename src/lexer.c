@@ -40,7 +40,7 @@ int fill_buffer(int bufno);
 
 char get_next_char();
 char peek_next_char();
-int skip_whitespaces();
+void skip_whitespaces();
 
 TokenStruct make_token(TokenType type);
 TokenType read_keyword(const char *identifier_literal);
@@ -96,22 +96,28 @@ char get_next_char() {
 
 char peek_next_char() { return *forward; }
 
-int skip_whitespaces() {
+void skip_whitespaces() {
   char c = get_next_char();
-  int was_whitespace = 0;
   while (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-    was_whitespace++;
     c = get_next_char();
   }
-  return was_whitespace;
+  forward--;
 }
 
 TokenStruct make_token(TokenType type) {
+  if (type == _EOF) {
+    return (TokenStruct){.type = type};
+  }
+
   long int length = forward - lexeme_begin;
   char *literal = (char *)malloc((size_t)length);
   strncpy(literal, lexeme_begin, (size_t)length);
   literal[length] = '\0';
   lexeme_begin = forward;
+
+  D(fprintf(stdout, "DEBUG: src/lexer.c/make_token: literal -> '%s'\n",
+            literal));
+
   return (TokenStruct){.type = type, .literal = literal};
 }
 
@@ -126,8 +132,18 @@ TokenType read_keyword(const char *identifier_literal) {
 
 TokenStruct read_identifier() {
   while (is_identifier_char(peek_next_char())) {
+
+    D(fprintf(stdout, "DEBUG: src/lexer.c/read_identifier: forward-> '%c'\n",
+              *forward));
+
     get_next_char();
   }
+
+  D(fprintf(stdout,
+            "DEBUG: src/lexer.c/read_identifier: lexeme_begin-> '%c', "
+            "forward-> '%c'\n",
+            *lexeme_begin, *forward));
+
   TokenStruct token = make_token(IDENTIFIER);
   token.type = read_keyword(token.literal);
   return token;
@@ -136,10 +152,16 @@ TokenStruct read_identifier() {
 TokenStruct read_number() {
   int is_floating = 0; /* 1 if number is floating */
   while (is_number_char(peek_next_char())) {
-    if (peek_next_char() == '.' && is_floating) {
-      E(fprintf(stderr, "Syntax Error: Expected Number but got %c",
-                peek_next_char()));
+
+    if (peek_next_char() == '.') {
+      if (is_floating) {
+        E(fprintf(stderr, "Syntax Error: Expected Number but got '%c'",
+                  peek_next_char()));
+      } else {
+        is_floating = 1;
+      }
     }
+
     get_next_char();
   }
   TokenStruct token = make_token(LITERAL_NUMBER);
@@ -174,7 +196,7 @@ TokenStruct scantoken_symbol(char c) {
     token = make_token(COMMA);
     break;
   case '~':
-    if (get_next_char() == '=') {
+    if (peek_next_char() == '=') {
       token = make_token(NOT_EQUAL);
       break;
     }
@@ -199,7 +221,7 @@ TokenStruct scantoken_symbol(char c) {
     token = make_token(DIV);
     break;
   case '=':
-    if (get_next_char() == '=') {
+    if (peek_next_char() == '=') {
       token = make_token(EQUAL_EQUAL);
       break;
     }
@@ -214,20 +236,17 @@ TokenStruct scantoken_symbol(char c) {
 
 TokenStruct get_next_token() {
   TokenStruct token = {0}; /* First time the TokenType should be illegal */
-  int was_whitespace = skip_whitespaces();
-  char c;
+  skip_whitespaces();
+  lexeme_begin = forward; /* Marking Start of Token */
 
-  if (was_whitespace) {
-    c = peek_next_char();
-  } else {
-    c = get_next_char();
-  }
+  char c = get_next_char();
+  D(fprintf(stdout, "DEBUG: src/lexer.c/get_next_token: c -> '%c'\n", c));
 
-  lexeme_begin = forward;
   if (c == EOF) {
     token = make_token(_EOF);
     return token;
   }
+
   if (is_identifier_start(c)) {
     token = read_identifier();
   } else if (is_number_char(c)) {

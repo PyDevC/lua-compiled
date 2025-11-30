@@ -56,15 +56,15 @@ typedef enum {
 } TokenType;
 
 typedef struct TokenStruct {
+  TokenType type;
   char *literal;
   size_t linenumber;
   size_t colnumber;
-  TokenType type;
 } TokenStruct;
 
 typedef struct {
-  const char *literal;
   TokenType type;
+  const char *literal;
 } KeywordEntry;
 
 int init_lexer(const char *filename);

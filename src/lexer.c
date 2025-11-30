@@ -104,6 +104,27 @@ void skip_whitespaces() {
   forward--;
 }
 
+void skip_comments() {
+  // only single line comments supported
+  char c = get_next_char();
+  if (c == '-') {
+    if (peek_next_char() == '-') {
+      c = get_next_char();
+      while (1) {
+        if (c == '\n' || c == EOF) {
+          skip_comments();
+          return;
+        }
+        D(fprintf(stdout, "DEBUG: src/lexer.c/skip_comments: c -> '%c'\n", c));
+        c = get_next_char();
+      }
+    } else {
+      forward--;
+    }
+  }
+  forward--;
+}
+
 TokenStruct make_token(TokenType type) {
   if (type == _EOF) {
     return (TokenStruct){.type = type};
@@ -236,6 +257,8 @@ TokenStruct scantoken_symbol(char c) {
 
 TokenStruct get_next_token() {
   TokenStruct token = {0}; /* First time the TokenType should be illegal */
+  skip_whitespaces();
+  skip_comments();
   skip_whitespaces();
   lexeme_begin = forward; /* Marking Start of Token */
 

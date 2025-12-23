@@ -11,9 +11,9 @@ CC=gcc
 flags=-Wall
 DEBUG=-g -DDEBUG_LUA=1
 
-.PHONY: all build
+.PHONY: all build test debug
 
-all: build
+all: build test
 
 build:
 	mkdir -p build
@@ -22,3 +22,6 @@ build:
 debug: 
 	mkdir -p build
 	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o build/lua
+
+test: 
+	build/lua ./testfiles/assignment.lua

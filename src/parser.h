@@ -10,7 +10,18 @@ typedef struct ExprNode ExprNode;
 typedef struct NameList NameList;
 typedef struct VarNode VarNode;
 
-struct ExprNode {
+typedef enum {
+    PREC_NIL,
+    PREC_OR,
+    PREC_AND,
+    PREC_ADDSUB,
+    PREC_MULDIV,
+    PREC_POW,
+    PREC_UNARY
+} OpPrecedence;
+
+struct ExprNode
+{
     enum {
         NilExpr,
         FalseExpr,
@@ -22,18 +33,21 @@ struct ExprNode {
         UnaryExpr
     } type;
 
-    union {
+    union
+    {
         double number_expr;
         char *string_expr;
         VarNode *prefix_expr_var;
 
-        struct {
+        struct
+        {
             char *op;
             ExprNode *left;
             ExprNode *right;
         } binary_expr;
 
-        struct {
+        struct
+        {
             char *op;
             ExprNode *right;
         } unary_expr;
@@ -41,25 +55,30 @@ struct ExprNode {
     } data;
 };
 
-struct VarNode {
+struct VarNode
+{
     enum { NameVar } type;
     char *name;
 };
 
-struct StatNode {
+struct StatNode
+{
     enum {
         AssignmentStat,
         LocalVarListDefStat,
     } type;
 
-    union {
+    union
+    {
 
-        struct {
+        struct
+        {
             VarNode *var;
             ExprNode *expr;
         } assingment_stat;
 
-        struct {
+        struct
+        {
             NameList *namelist;
             ExprNode *expr;
         } localvarlist_stat;
@@ -67,12 +86,14 @@ struct StatNode {
     } data;
 };
 
-struct StatNodeList {
+struct StatNodeList
+{
     StatNode *stat;
     StatNodeList *next;
 };
 
-struct NameList {
+struct NameList
+{
     char *name;
     NameList *next;
 };

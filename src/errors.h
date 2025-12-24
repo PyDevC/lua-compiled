@@ -16,25 +16,29 @@ typedef struct CallFrame CallFrame;
 typedef struct Symbol Symbol;
 typedef struct TraceStack TraceStack;
 
-struct CallFrame {
+struct CallFrame
+{
     const char *functioncall;
     const char *filename;
     size_t line_number;
     TraceStack *next;
 };
 
-struct Symbol {
+struct Symbol
+{
     const char *symbolname;
     const char *filename;
     size_t line_number;
     TraceStack *next;
 };
 
-struct TraceStack {
+struct TraceStack
+{
     enum { CALL, SYM } type;
     size_t level;
 
-    union {
+    union
+    {
         CallFrame *callframes;
         Symbol *symbols;
     } frame;

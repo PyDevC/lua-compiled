@@ -19,7 +19,8 @@ void parse_binaryop_expr(ExprNode *expr, int binop_type);
 void parse_prefix_expr(ExprNode *expr);
 void parse_unaryop_expr(ExprNode *expr, int unary_type);
 
-StatNodeList *create_empty_chunk() {
+StatNodeList *create_empty_chunk()
+{
     StatNodeList *chunk = (StatNodeList *)malloc(sizeof(StatNodeList *));
     if (chunk == NULL) {
         E(fprintf(stderr, "Fatal Error: Memory for chunk not allocated"));
@@ -30,7 +31,8 @@ StatNodeList *create_empty_chunk() {
     return chunk;
 }
 
-StatNodeList *parse_chunk() {
+StatNodeList *parse_chunk()
+{
     StatNodeList *chunk = create_empty_chunk();
     StatNodeList *temp = NULL;
     global_token = get_next_token();
@@ -63,7 +65,8 @@ StatNodeList *parse_chunk() {
     return chunk;
 }
 
-StatNode *parse_stat() {
+StatNode *parse_stat()
+{
     StatNode *stat = malloc(sizeof(StatNode));
     switch (global_token.type) {
     case IDENTIFIER:
@@ -82,7 +85,8 @@ StatNode *parse_stat() {
     return stat;
 }
 
-void parse_var_stat(StatNode *stat) {
+void parse_var_stat(StatNode *stat)
+{
     TokenStruct token = get_next_token();
     stat->type = AssignmentStat;
     stat->data.assingment_stat.var = (VarNode *)malloc(sizeof(VarNode *));
@@ -95,7 +99,8 @@ void parse_var_stat(StatNode *stat) {
     }
 }
 
-void parse_localvar_stat(StatNode *stat) {
+void parse_localvar_stat(StatNode *stat)
+{
     stat->type = LocalVarListDefStat;
     TokenStruct token = get_next_token();
     stat->data.localvarlist_stat.namelist->name = token.literal;
@@ -106,7 +111,8 @@ void parse_localvar_stat(StatNode *stat) {
     }
 }
 
-ExprNode *parse_expr() {
+ExprNode *parse_expr()
+{
     ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode *));
     TokenStruct token;
     switch (global_token.type) {
@@ -163,7 +169,8 @@ ExprNode *parse_expr() {
     return expr;
 }
 
-void parse_binaryop_expr(ExprNode *expr, int binop_type) {
+void parse_binaryop_expr(ExprNode *expr, int binop_type)
+{
     switch (binop_type) {
     case ADD:
         expr->data.binary_expr.op = "+";
@@ -193,7 +200,8 @@ void parse_binaryop_expr(ExprNode *expr, int binop_type) {
     expr->data.binary_expr.right = parse_expr();
 }
 
-void parse_unaryop_expr(ExprNode *expr, int unaryop) {
+void parse_unaryop_expr(ExprNode *expr, int unaryop)
+{
     switch (unaryop) {
     case SUB:
         expr->data.unary_expr.op = "-";
@@ -208,7 +216,8 @@ void parse_unaryop_expr(ExprNode *expr, int unaryop) {
     expr->data.unary_expr.right = parse_expr();
 }
 
-void parse_prefix_expr(ExprNode *expr) {
+void parse_prefix_expr(ExprNode *expr)
+{
     expr->data.prefix_expr_var = (VarNode *)malloc(sizeof(VarNode *));
     expr->data.prefix_expr_var->name = global_token.literal;
     expr->data.prefix_expr_var->type = NameVar;

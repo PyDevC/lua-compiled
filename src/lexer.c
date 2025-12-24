@@ -50,7 +50,8 @@ TokenStruct get_next_token();
 
 /* Function Definitions */
 
-int fill_buffer(int bufno) {
+int fill_buffer(int bufno)
+{
     int idx = bufno * READBUFFER_SIZE;
     size_t read_counter = fread(&buffer[idx], 1, READBUFFER_SIZE, f);
 
@@ -65,7 +66,8 @@ int fill_buffer(int bufno) {
     return 1;
 }
 
-char get_next_char() {
+char get_next_char()
+{
     char c = *forward;
 
     if (c == '\0') {
@@ -94,7 +96,8 @@ char get_next_char() {
 
 char peek_next_char() { return *forward; }
 
-void skip_whitespaces() {
+void skip_whitespaces()
+{
     char c = get_next_char();
     while (is_blank(c)) {
         c = get_next_char();
@@ -102,7 +105,8 @@ void skip_whitespaces() {
     forward--;
 }
 
-void skip_comments() {
+void skip_comments()
+{
     // only single line comments supported
     char c = get_next_char();
     if (c == '-') {
@@ -124,7 +128,8 @@ void skip_comments() {
     forward--;
 }
 
-TokenStruct make_token(TokenType type) {
+TokenStruct make_token(TokenType type)
+{
     if (type == _EOF) {
         return (TokenStruct){.type = type};
     }
@@ -141,7 +146,8 @@ TokenStruct make_token(TokenType type) {
     return (TokenStruct){.type = type, .literal = literal};
 }
 
-TokenType read_keyword(const char *identifier_literal) {
+TokenType read_keyword(const char *identifier_literal)
+{
     for (int i = 0; keywords[i].literal != NULL; i++) {
         if (strcmp(keywords[i].literal, identifier_literal) == 0) {
             return keywords[i].type;
@@ -150,7 +156,8 @@ TokenType read_keyword(const char *identifier_literal) {
     return IDENTIFIER;
 }
 
-TokenStruct read_identifier() {
+TokenStruct read_identifier()
+{
     while (is_identifier(peek_next_char())) {
 
         D(fprintf(stdout,
@@ -170,7 +177,8 @@ TokenStruct read_identifier() {
     return token;
 }
 
-TokenStruct read_number() {
+TokenStruct read_number()
+{
     int is_floating = 0; /* 1 if number is floating */
     while (is_digit(peek_next_char()) || peek_next_char() == '.') {
 
@@ -189,7 +197,8 @@ TokenStruct read_number() {
     return token;
 }
 
-TokenStruct scantoken_symbol(char c) {
+TokenStruct scantoken_symbol(char c)
+{
     TokenStruct token;
     switch (c) {
     case '(':
@@ -255,7 +264,8 @@ TokenStruct scantoken_symbol(char c) {
     return token;
 }
 
-TokenStruct get_next_token() {
+TokenStruct get_next_token()
+{
     TokenStruct token = {0}; /* First time the TokenType should be illegal */
     skip_whitespaces();
     skip_comments();
@@ -280,7 +290,8 @@ TokenStruct get_next_token() {
     return token;
 }
 
-int init_lexer(const char *filename) {
+int init_lexer(const char *filename)
+{
     f = fopen(filename, "r");
     if (!f) {
         return 1;

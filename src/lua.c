@@ -6,13 +6,15 @@
 #include "parser.h"
 #include <stdio.h>
 
-void usage() {
+void usage()
+{
     /* Display usage of the compiler with the options available */
     printf("lua [flags] [filename]\n");
     printf("ex: lua hello.lua\n");
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     if (argc == 1) {
         usage();
         return 1;

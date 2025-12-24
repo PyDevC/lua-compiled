@@ -61,14 +61,16 @@ typedef enum {
     IDENTIFIER,
 } TokenType;
 
-typedef struct TokenStruct {
+typedef struct TokenStruct
+{
     TokenType type;
     char *literal;
     size_t linenumber;
     size_t colnumber;
 } TokenStruct;
 
-typedef struct {
+typedef struct
+{
     TokenType type;
     const char *literal;
 } KeywordEntry;

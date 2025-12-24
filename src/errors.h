@@ -17,27 +17,27 @@ typedef struct Symbol Symbol;
 typedef struct TraceStack TraceStack;
 
 struct CallFrame {
-  const char *functioncall;
-  const char *filename;
-  size_t line_number;
-  TraceStack *next;
+    const char *functioncall;
+    const char *filename;
+    size_t line_number;
+    TraceStack *next;
 };
 
 struct Symbol {
-  const char *symbolname;
-  const char *filename;
-  size_t line_number;
-  TraceStack *next;
+    const char *symbolname;
+    const char *filename;
+    size_t line_number;
+    TraceStack *next;
 };
 
 struct TraceStack {
-  enum { CALL, SYM } type;
-  size_t level;
+    enum { CALL, SYM } type;
+    size_t level;
 
-  union {
-    CallFrame *callframes;
-    Symbol *symbols;
-  } frame;
+    union {
+        CallFrame *callframes;
+        Symbol *symbols;
+    } frame;
 };
 
 extern TraceStack global_tracestack;

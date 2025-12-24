@@ -15,6 +15,6 @@
 TraceStack global_tracestack;
 
 void init_trace_stack(TraceStack *tracestack) {
-  tracestack = malloc(sizeof(TraceStack));
-  tracestack->level = 0;
+    tracestack = malloc(sizeof(TraceStack));
+    tracestack->level = 0;
 }

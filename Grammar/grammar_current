@@ -2,18 +2,27 @@
 
 	block ::= chunk
 
-	stat ::=  var `=´ exp | 
-		 local Name [`=´ exp] 
+	stat ::=  var `=´ exp 
+            | local Name [`=´ exp] 
 
 	var ::=  Name
 
-	exp ::=  nil | false | true | Number | String |
-		 prefixexp | exp binop exp | unop exp 
+	exp ::=  nil 
+           | false 
+           | true 
+           | Number 
+           | prefixexp 
+           | exp binop exp 
+           | unop exp 
 
-	prefixexp ::= var | `(´ exp `)´
+	prefixexp ::= var 
+                | `(´ exp `)´
 
-	binop ::= `+´ | `-´ | `*´ | `/´ | `^´ | `%´ | `..´ | 
-		 `<´ | `<=´ | `>´ | `>=´ | `==´ | `~=´ | 
-		 and | or
+	binop ::= `*´ 
+             | `/´ 
+             | `-´ 
+             | `+`
 
-	unop ::= `-´ | not | `#´
+	unop ::= `-´ 
+            | not 
+            | `#´

@@ -1,0 +1,10 @@
+# Different Operators in lua-compiled
+infix: + - * / > < >= <= == ~=
+prefix: + - ! not and or
+
+# Operators are arranged in High to Low precedence order
+!
+* /
++ -
+and
+or

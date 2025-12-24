@@ -1,6 +1,7 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "lexer.h"
 #include <stdbool.h>
 
 /* Forward Declarations */
@@ -9,6 +10,8 @@ typedef struct StatNode StatNode;
 typedef struct ExprNode ExprNode;
 typedef struct NameList NameList;
 typedef struct VarNode VarNode;
+typedef struct ExprNode *(*PrefixFn)(TokenType type);
+typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type);
 
 typedef enum {
     PREC_NIL,
@@ -24,8 +27,7 @@ struct ExprNode
 {
     enum {
         NilExpr,
-        FalseExpr,
-        TrueExpr,
+        BooleanExpr,
         NumberExpr,
         StringExpr,
         PrefixExpr,
@@ -97,6 +99,13 @@ struct NameList
     char *name;
     NameList *next;
 };
+
+typedef struct
+{
+    PrefixFn prefix;
+    InfixFn infix;
+    OpPrecedence precedence;
+} ParseRule;
 
 StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
 

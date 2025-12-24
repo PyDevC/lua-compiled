@@ -15,9 +15,40 @@ void parse_localvar_stat(StatNode *stat);
 
 /* Expr functions */
 ExprNode *parse_expr();
-void parse_binaryop_expr(ExprNode *expr, int binop_type);
-void parse_prefix_expr(ExprNode *expr);
-void parse_unaryop_expr(ExprNode *expr, int unary_type);
+ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type);
+ExprNode *parse_unaryop_expr(TokenType type);
+ExprNode *parse_number_expr(TokenType type);
+ExprNode *parse_string_expr(TokenType type);
+ExprNode *parse_nil_expr(TokenType type);
+ExprNode *parse_boolean_expr(TokenType type);
+ExprNode *parse_grouping_expr(TokenType type);
+
+/* Parsing Rules */
+ParseRule rules[] = {
+    /* Literal and Grouping Rules */
+    [LITERAL_NUMBER] = {parse_number_expr, NULL, PREC_NIL},
+    [LITERAL_STRING] = {parse_string_expr, NULL, PREC_NIL},
+    [NIL] = {parse_string_expr, NULL, PREC_NIL},
+    [TRUE] = {parse_boolean_expr, NULL, PREC_NIL},
+    [FALSE] = {parse_boolean_expr, NULL, PREC_NIL},
+    [LPAREN] = {parse_grouping_expr, parse_expr, PREC_NIL}, /* TODO: Check if it should be implemented in this way */
+
+    /* Arithmetic Rules */
+    [ADD] = {NULL, parse_binaryop_expr, PREC_ADDSUB},
+    [SUB] = {NULL, parse_binaryop_expr, PREC_ADDSUB},
+    [MUL] = {NULL, parse_binaryop_expr, PREC_MULDIV},
+    [DIV] = {NULL, parse_binaryop_expr, PREC_MULDIV},
+
+    /* String Operator Rules */
+    [HASH] = {parse_unaryop_expr, NULL, PREC_UNARY},
+
+    /* Relational Operator Rules */
+    [EQUAL_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
+    [NOT_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
+    [AND] = {NULL, parse_binaryop_expr, PREC_AND},
+    [OR] = {NULL, parse_binaryop_expr, PREC_OR},
+    [NOT] = {parse_unaryop_expr, NULL, PREC_UNARY},
+};
 
 StatNodeList *create_empty_chunk()
 {
@@ -119,11 +150,9 @@ ExprNode *parse_expr()
     case NIL:
         expr->type = NilExpr;
         break;
-    case FALSE:
-        expr->type = FalseExpr;
-        break;
     case TRUE:
-        expr->type = TrueExpr;
+    case FALSE:
+        expr->type = BooleanExpr;
         break;
     case LITERAL_NUMBER:
         token = get_next_token();
@@ -169,7 +198,7 @@ ExprNode *parse_expr()
     return expr;
 }
 
-void parse_binaryop_expr(ExprNode *expr, int binop_type)
+ExprNode *parse_binaryop_expr(ExprNode *expr, int binop_type)
 {
     switch (binop_type) {
     case ADD:

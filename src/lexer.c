@@ -5,14 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define is_identifier_start(c)                                                 \
-  ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
-
-#define is_identifier_char(c)                                                  \
-  ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||                         \
-   (c >= '0' && c <= '9') || c == '_')
-
-#define is_number_char(c) ((c >= '0' && c <= '9') || (c == '.'))
+#define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+#define is_digit(c) (c >= '0' && c <= '9')
+#define is_alnum(c) (is_digit(c) || is_alpha(c))
+#define is_blank(c) (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+#define is_identifier_start(c) (is_alpha(c) || c == '_')
+#define is_identifier(c) (is_alnum(c) || c == '_')
 
 FILE *f = NULL;
 
@@ -98,7 +96,7 @@ char peek_next_char() { return *forward; }
 
 void skip_whitespaces() {
   char c = get_next_char();
-  while (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+  while (is_blank(c)) {
     c = get_next_char();
   }
   forward--;
@@ -152,7 +150,7 @@ TokenType read_keyword(const char *identifier_literal) {
 }
 
 TokenStruct read_identifier() {
-  while (is_identifier_char(peek_next_char())) {
+  while (is_identifier(peek_next_char())) {
 
     D(fprintf(stdout, "DEBUG: src/lexer.c/read_identifier: forward-> '%c'\n",
               *forward));
@@ -172,7 +170,7 @@ TokenStruct read_identifier() {
 
 TokenStruct read_number() {
   int is_floating = 0; /* 1 if number is floating */
-  while (is_number_char(peek_next_char())) {
+  while (is_digit(peek_next_char()) || peek_next_char() == '.') {
 
     if (peek_next_char() == '.') {
       if (is_floating) {
@@ -272,7 +270,7 @@ TokenStruct get_next_token() {
 
   if (is_identifier_start(c)) {
     token = read_identifier();
-  } else if (is_number_char(c)) {
+  } else if (is_digit(c)) {
     token = read_number();
   } else {
     token = scantoken_symbol(c);

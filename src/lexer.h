@@ -79,6 +79,7 @@ int init_lexer(const char *filename);
 // returns the exit of lexer 0 means everything is
 // alright but 1 means that something went wrong
 
-TokenStruct get_next_token();
+TokenStruct consume_token();
+TokenStruct peek_next_token();
 
 #endif // LEXER_H

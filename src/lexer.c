@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+static TokenStruct peeked_token = {};
+static short has_peeked = 0;
+
 #define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
 #define is_digit(c) (c >= '0' && c <= '9')
 #define is_alnum(c) (is_digit(c) || is_alpha(c))
@@ -288,6 +291,24 @@ TokenStruct get_next_token()
         token = scantoken_symbol(c);
     }
     return token;
+}
+
+TokenStruct peek_next_token()
+{
+    if (!has_peeked) {
+        peeked_token = get_next_token();
+        has_peeked = 1;
+        return peeked_token;
+    }
+    return peeked_token;
+}
+TokenStruct consume_token()
+{
+    if (has_peeked) {
+        has_peeked = 0;
+        return peeked_token;
+    }
+    return get_next_token();
 }
 
 int init_lexer(const char *filename)

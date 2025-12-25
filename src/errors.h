@@ -12,40 +12,40 @@
 #define E(x) x
 #define MAX_TRACE_STACK_DEPTH 200
 
-typedef struct CallFrame CallFrame;
-typedef struct Symbol Symbol;
-typedef struct TraceStack TraceStack;
+typedef enum {
+    Undefined,
+    CallingBeforeDeclaration,
+    FileNotFound,
+    NoError
+} error_type;
 
-struct CallFrame
+typedef struct
 {
-    const char *functioncall;
-    const char *filename;
-    size_t line_number;
-    TraceStack *next;
-};
+    error_type error;
+    char *filename;
+    long long linenumber;
+    int colnumber;
+} CallBack;
 
-struct Symbol
+typedef struct
 {
-    const char *symbolname;
-    const char *filename;
-    size_t line_number;
-    TraceStack *next;
-};
+    CallBack *current; /* Current CallBack */
+    CallBack *next;    /* Pointer to next CallBack */
+    CallBack *last;    /* Last TraceStack in the CallBack */
+    CallBack *first;   /* First CallBack in the tracestack */
+    int level;         /* TraceStack level = 0 if its empty */
+} TraceStack;
 
-struct TraceStack
-{
-    enum { CALL, SYM } type;
-    size_t level;
-
-    union
-    {
-        CallFrame *callframes;
-        Symbol *symbols;
-    } frame;
-};
+void init_trace_stack(TraceStack *tracestack, char *filename);
+void trace_stack_insert(TraceStack *tracestack);
+CallBack trace_stack_pop(TraceStack *tracestack);
+CallBack *generate_callback(error_type error, char *filename,
+                            long long linenumber, int colnumber);
+int stdout_tracestack();
+void terminate();
+/* If any panic error occurs then terminate the process of
+                     compilation */
 
 extern TraceStack global_tracestack;
-
-void init_trace_stack(TraceStack *tracestack);
 
 #endif // ERRORS_H

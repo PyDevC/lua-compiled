@@ -4,23 +4,15 @@
 #include "lexer.h"
 #include <stdbool.h>
 
-typedef enum {
-    PREC_NULL,
-    PREC_NIL,
-    PREC_OR,
-    PREC_AND,
-    PREC_ADDSUB,
-    PREC_MULDIV,
-    PREC_POW,
-    PREC_UNARY
-} OpPrecedence;
+typedef enum { PREC_NIL, PREC_ADDSUB, PREC_MULDIV, PREC_UNARY } OpPrecedence;
 
 /* Forward Declarations */
 typedef struct StatNodeList StatNodeList; /* Chunk or Block */
 typedef struct StatNode StatNode;
 typedef struct ExprNode ExprNode;
-typedef struct NameList NameList;
 typedef struct VarNode VarNode;
+
+/* Function pointers to call the parser_function for desired token */
 typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
                                      OpPrecedence precedence);
 typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type,
@@ -28,21 +20,14 @@ typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type,
 
 struct ExprNode
 {
-    enum {
-        NilExpr,
-        BooleanExpr,
-        NumberExpr,
-        StringExpr,
-        PrefixExpr,
-        BinaryExpr,
-        UnaryExpr
-    } type;
-
     union
     {
-        double number_expr;
-        char *string_expr;
-        VarNode *prefix_expr_var;
+        double literalnumber; /* Convert litearl string to double before adding
+                                 to this Expr */
+        char *literalstring;
+        short isnil;
+        short boolean;
+        VarNode *var;
 
         struct
         {
@@ -53,7 +38,7 @@ struct ExprNode
 
         struct
         {
-            char *op;
+            TokenType op;
             ExprNode *right;
         } unary_expr;
 
@@ -62,33 +47,18 @@ struct ExprNode
 
 struct VarNode
 {
-    enum { NameVar } type;
     char *name;
 };
 
 struct StatNode
 {
-    enum {
-        AssignmentStat,
-        LocalVarListDefStat,
-        FunctionCallStat,
-    } type;
-
     union
     {
-
         struct
         {
             VarNode *var;
             ExprNode *expr;
         } assingment_stat;
-
-        struct
-        {
-            NameList *namelist;
-            ExprNode *expr;
-        } localvarlist_stat;
-
     } data;
 };
 
@@ -96,12 +66,6 @@ struct StatNodeList
 {
     StatNode *stat;
     StatNodeList *next;
-};
-
-struct NameList
-{
-    char *name;
-    NameList *next;
 };
 
 typedef struct

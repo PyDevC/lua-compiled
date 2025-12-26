@@ -10,54 +10,54 @@ StatNodeList *parse_chunk();
 
 /* Statment functions */
 StatNode *parse_stat();
-void parse_var_stat(StatNode *stat);
-void parse_localvar_stat(StatNode *stat);
-void parse_assignment_or_function_call(StatNode *stat, TokenStruct token);
+void parse_assignment_stat(StatNode *stat, TokenStruct token);
+/* a = 10 */
 
 /* Expr functions */
 ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence);
-ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type,
-                              OpPrecedence precedence);
-ExprNode *parse_unaryop_expr(TokenStruct token, OpPrecedence precedence);
-ExprNode *parse_number_expr(TokenStruct token, OpPrecedence precedence);
-ExprNode *parse_string_expr(TokenStruct token, OpPrecedence precedence);
-ExprNode *parse_nil_expr(TokenStruct token, OpPrecedence precedence);
-ExprNode *parse_boolean_expr(TokenStruct token, OpPrecedence precedence);
-ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
+/* Parse Expression and use get_rule to tell which rult to apply */
+
+ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
+                            OpPrecedence precedence);
+/* a = a + b */
+ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence precedence);
+/* a = -10 */
+ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence);
+/* a = 10 or a = nil or a = "10" or a = true */
+ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence precedence);
+/* a = b */
+
+// TODO: ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence
+// precedence);
+/* (a + b) + c */
 
 /* Parsing Rules */
 ParseRule rules[] = {
     /* Literal and Grouping Rules */
-    [LITERAL_NUMBER] = {parse_number_expr, NULL, PREC_NIL},
-    [LITERAL_STRING] = {parse_string_expr, NULL, PREC_NIL},
-    //[NIL] = {parse_string_expr, NULL, PREC_NIL},
-    //[TRUE] = {parse_boolean_expr, NULL, PREC_NIL},
-    //[FALSE] = {parse_boolean_expr, NULL, PREC_NIL},
-    // [LPAREN] = {parse_grouping_expr, parse_expr, PREC_NULL},
-    /* TODO: Check if it should be implemented in this way */
+    /* [TokenType] = {PrefixFn, InfixFn, precedence}, */
+
+    [LITERAL_NUMBER] = {parse_constant_expr, NULL, PREC_NIL},
+    [LITERAL_STRING] = {parse_constant_expr, NULL, PREC_NIL},
+    [IDENTIFIER] = {parse_constant_expr, NULL, PREC_NIL},
+    [NIL] = {parse_constant_expr, NULL, PREC_NIL},
+    [TRUE] = {parse_constant_expr, NULL, PREC_NIL},
+    [FALSE] = {parse_constant_expr, NULL, PREC_NIL},
 
     /* Arithmetic Rules */
-    [ADD] = {NULL, parse_binaryop_expr, PREC_ADDSUB},
-    [SUB] = {NULL, parse_binaryop_expr, PREC_ADDSUB},
-    [MUL] = {NULL, parse_binaryop_expr, PREC_MULDIV},
-    [DIV] = {NULL, parse_binaryop_expr, PREC_MULDIV},
-
-    /* String Operator Rules */
-    //[HASH] = {parse_unaryop_expr, NULL, PREC_UNARY},
-
-    /* Relational Operator Rules */
-    //[EQUAL_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
-    //[NOT_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
-    //[AND] = {NULL, parse_binaryop_expr, PREC_AND},
-    //[OR] = {NULL, parse_binaryop_expr, PREC_OR},
-    //[NOT] = {parse_unaryop_expr, NULL, PREC_UNARY},
+    [ADD] = {NULL, parse_binary_expr, PREC_ADDSUB},
+    [SUB] = {NULL, parse_binary_expr, PREC_ADDSUB},
+    [MUL] = {NULL, parse_binary_expr, PREC_MULDIV},
+    [DIV] = {NULL, parse_binary_expr, PREC_MULDIV},
 };
 
-ParseRule *get_rule(TokenType type) { return &rules[type]; }
+ParseRule *get_rule(TokenType type)
+{
+    return &rules[type];
+} /* returns either PrefixFn or InfixFn or NULL */
 
 StatNodeList *create_empty_chunk()
 {
-    StatNodeList *chunk = (StatNodeList *)malloc(sizeof(StatNodeList *));
+    StatNodeList *chunk = malloc(sizeof(StatNodeList));
     if (chunk == NULL) {
         E(fprintf(stderr, "Fatal Error: Memory for chunk not allocated"));
         exit(1);
@@ -71,14 +71,11 @@ StatNodeList *parse_chunk()
 {
     StatNodeList *chunk = create_empty_chunk();
     StatNodeList *temp = NULL;
-    TokenStruct token = peek_next_token();
 
-    while (1) {
-        if (token.type == _EOF) {
-            break;
-        }
-        if (token.type == ILLEGAL) {
-            E(fprintf(stderr, "Syntax Error: %s is unexpected", token.literal));
+    while (peek_next_token().type != _EOF) {
+        if (peek_next_token().type == ILLEGAL) {
+            E(fprintf(stderr, "Syntax Error: %s is unexpected\n",
+                      peek_next_token().literal));
             exit(1);
         }
 
@@ -101,121 +98,123 @@ StatNodeList *parse_chunk()
 
 StatNode *parse_stat()
 {
+    /**
+     * parse_stat checks if the starting symbol of statment is Identifer or not.
+     *
+     * Case IDENTIFER:
+     *      Check if there is equal after it. If yes then parse as
+     * assignment_stat.
+     *
+     * @return StatNode
+     **/
     TokenStruct token = consume_token();
-    // if (global_tracestack.last->error) {
-    //     terminate();
-    // }
     StatNode *stat = malloc(sizeof(StatNode));
-    memset(stat, 0, sizeof(StatNode));
+
     switch (token.type) {
-    case IDENTIFIER:
-        parse_assignment_or_function_call(stat, token);
-        break;
-    // case LOCAL:
-    //     parse_localvar_stat(stat);
-    //     break;
+    case IDENTIFIER: {
+        if (peek_next_token().type == EQUAL) {
+            parse_assignment_stat(stat, token);
+        } else {
+            E(fprintf(stderr,
+                      "Syntax Error: Expected '=' after Identifer '%s'\n",
+                      token.literal));
+            exit(1);
+        }
+    } break;
     default:
-        E(fprintf(
-            stderr,
-            "Syntax Error: Token does not match for the statement %d: %s\n",
-            token.type, token.literal));
+        E(fprintf(stderr, "Syntax Error: Statment should not start with %s\n",
+                  token.literal));
         exit(1);
     };
     return stat;
 }
 
-void parse_assignment_or_function_call(StatNode *stat, TokenStruct token)
+void parse_assignment_stat(StatNode *stat, TokenStruct token)
 {
-    TokenStruct advance = peek_next_token();
-
-    switch (advance.type) {
-    case EQUAL:
-    case COMMA: {
-        /* Assignment */
-        stat->type = AssignmentStat;
-        stat->data.assingment_stat.var = malloc(sizeof(VarNode));
-        stat->data.assingment_stat.var->name = token.literal;
-        stat->data.assingment_stat.var->type = NameVar;
-        /*TODO: Add a while loop here to implement Multiple assingments
-         * Check if the next type is comma or equal according to that
-         * you can implement what to do if we have equal or comma after a new
-         * identifier
-         */
-        if (advance.type == COMMA) {
-            printf("TODO: Multiple assingments not implemented\n");
-            exit(1);
-            token = consume_token();
-            advance = peek_next_token();
-            while (1) {
-                if (advance.type == IDENTIFIER) {
-                    /* Var, Var */
-                    token = consume_token();
-                } else {
-                    terminate();
-                }
-            }
-        } else {
-            token = consume_token(); /* token = EQUAL */
-            stat->data.assingment_stat.expr =
-                parse_expr(NULL, peek_next_token().type, PREC_NULL);
-        }
-    } break;
-    case LPAREN: {
-        stat->type = FunctionCallStat;
-        printf("TODO: function call to be implemented\n");
-        exit(1);
-    } break;
-    default:
-        break;
-    };
+    /**
+     * parse_assignment_stat assigns assingment_stat node to this StatNode.
+     * assingment_stat node as two children: VarNode and ExprNode.
+     **/
+    stat->data.assingment_stat.var = malloc(sizeof(VarNode));
+    stat->data.assingment_stat.var->name = token.literal;
+    stat->data.assingment_stat.expr = malloc(sizeof(ExprNode));
+    stat->data.assingment_stat.expr =
+        parse_expr(stat->data.assingment_stat.expr, token.type, 0.0);
 }
 
 ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence)
 {
-    TokenStruct token = consume_token(); /* token = IDENTIFIER | LITERAL_NUMBER
-                                            | LITERAL_STRING */
-    PrefixFn prefix_rule = get_rule(type)->prefix;
+    /**
+     *
+     **/
+    TokenStruct token = peek_next_token(); /* First Token After EQUAL */
+    PrefixFn prefix_rule = get_rule(token.type)->prefix;
     if (prefix_rule == NULL) {
-        E(fprintf(stderr, "No prefix rule found\n"));
-        return expr;
+        E(fprintf(stderr, "Syntax Error: No prefix rule for Token: '%s'\n",
+                  token.literal));
+        exit(1);
     }
 
-    ExprNode *left = prefix_rule(token, precedence);
+    ExprNode *left_expr = prefix_rule(token, precedence);
+
     while (precedence < get_rule(peek_next_token().type)->precedence) {
-        token = peek_next_token();
-        ExprNode *left =
-            get_rule(token.type)
-                ->infix(left, token.type, get_rule(token.type)->precedence);
+        token = consume_token();
+        InfixFn infix_rule = get_rule(token.type)->infix;
+        if (infix_rule == NULL) {
+            E(fprintf(
+                stdout,
+                "No infix rule found, Note this could be a normal thing.\n"));
+            return left_expr;
+        }
+        left_expr =
+            infix_rule(left_expr, token.type, get_rule(token.type)->precedence);
     }
-    return left;
+    return left_expr;
 }
 
-ExprNode *parse_number_expr(TokenStruct token, OpPrecedence precedence)
+ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
 {
     ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
-    expr->type = NumberExpr;
-    char *endptr;
-    expr->data.number_expr = strtod(token.literal, &endptr);
-    printf("%d\n", precedence);
-    return expr;
-}
+    switch (token.type) {
+    case LITERAL_STRING: {
+        expr->data.literalstring = token.literal;
+    } break;
+    case LITERAL_NUMBER: {
+        char *end_ptr;
+        expr->data.literalnumber = strtod(token.literal, &end_ptr);
+    } break;
+    case IDENTIFIER: {
+        expr->data.var = malloc(sizeof(VarNode));
+        expr->data.var->name = token.literal;
+    } break;
+    case NIL: {
+        expr->data.isnil = 1;
+    } break;
+    case TRUE: {
+        expr->data.boolean = 1;
+    } break;
+    case FALSE: {
+        expr->data.boolean = 0;
+    } break;
+    default:
+        E(fprintf(stderr,
+                  "Syntax Error: Expected a number, boolean, nil, identifer or "
+                  "string but got '%s'\n",
+                  token.literal));
+        exit(1);
+    }
 
-ExprNode *parse_string_expr(TokenStruct token, OpPrecedence precedence)
-{
-    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
-    expr->type = StringExpr;
-    expr->data.string_expr = token.literal;
-    printf("%d\n", precedence);
+    fprintf(stdout, "Just for test we have precedence: %d\n", precedence);
     return expr;
 }
 
 ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type,
                               OpPrecedence precedence)
 {
-    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
-    expr->type = BinaryExpr;
+    ExprNode *expr = malloc(sizeof(ExprNode));
+    ExprNode *right = malloc(sizeof(ExprNode));
     expr->data.binary_expr.left = left;
     expr->data.binary_expr.op = type;
-    expr->data.binary_expr.right = parse_expr(NULL, type, precedence);
+    expr->data.binary_expr.right = parse_expr(right, type, precedence);
     return expr;
 }

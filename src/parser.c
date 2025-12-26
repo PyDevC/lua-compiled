@@ -3,8 +3,8 @@
 #include "lexer.h"
 
 #include <stdlib.h>
+#include <string.h>
 
-static TokenStruct global_token;
 /* Helper Functions Forward Declaration */
 StatNodeList *parse_chunk();
 
@@ -12,26 +12,29 @@ StatNodeList *parse_chunk();
 StatNode *parse_stat();
 void parse_var_stat(StatNode *stat);
 void parse_localvar_stat(StatNode *stat);
+void parse_assignment_or_function_call(StatNode *stat, TokenStruct token);
 
 /* Expr functions */
-ExprNode *parse_expr();
-ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type);
-ExprNode *parse_unaryop_expr(TokenType type);
-ExprNode *parse_number_expr(TokenType type);
-ExprNode *parse_string_expr(TokenType type);
-ExprNode *parse_nil_expr(TokenType type);
-ExprNode *parse_boolean_expr(TokenType type);
-ExprNode *parse_grouping_expr(TokenType type);
+ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence);
+ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type,
+                              OpPrecedence precedence);
+ExprNode *parse_unaryop_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_number_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_string_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_nil_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_boolean_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
 
 /* Parsing Rules */
 ParseRule rules[] = {
     /* Literal and Grouping Rules */
     [LITERAL_NUMBER] = {parse_number_expr, NULL, PREC_NIL},
     [LITERAL_STRING] = {parse_string_expr, NULL, PREC_NIL},
-    [NIL] = {parse_string_expr, NULL, PREC_NIL},
-    [TRUE] = {parse_boolean_expr, NULL, PREC_NIL},
-    [FALSE] = {parse_boolean_expr, NULL, PREC_NIL},
-    [LPAREN] = {parse_grouping_expr, parse_expr, PREC_NIL}, /* TODO: Check if it should be implemented in this way */
+    //[NIL] = {parse_string_expr, NULL, PREC_NIL},
+    //[TRUE] = {parse_boolean_expr, NULL, PREC_NIL},
+    //[FALSE] = {parse_boolean_expr, NULL, PREC_NIL},
+    // [LPAREN] = {parse_grouping_expr, parse_expr, PREC_NULL},
+    /* TODO: Check if it should be implemented in this way */
 
     /* Arithmetic Rules */
     [ADD] = {NULL, parse_binaryop_expr, PREC_ADDSUB},
@@ -40,15 +43,17 @@ ParseRule rules[] = {
     [DIV] = {NULL, parse_binaryop_expr, PREC_MULDIV},
 
     /* String Operator Rules */
-    [HASH] = {parse_unaryop_expr, NULL, PREC_UNARY},
+    //[HASH] = {parse_unaryop_expr, NULL, PREC_UNARY},
 
     /* Relational Operator Rules */
-    [EQUAL_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
-    [NOT_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
-    [AND] = {NULL, parse_binaryop_expr, PREC_AND},
-    [OR] = {NULL, parse_binaryop_expr, PREC_OR},
-    [NOT] = {parse_unaryop_expr, NULL, PREC_UNARY},
+    //[EQUAL_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
+    //[NOT_EQUAL] = {NULL, parse_binaryop_expr, PREC_OR},
+    //[AND] = {NULL, parse_binaryop_expr, PREC_AND},
+    //[OR] = {NULL, parse_binaryop_expr, PREC_OR},
+    //[NOT] = {parse_unaryop_expr, NULL, PREC_UNARY},
 };
+
+ParseRule *get_rule(TokenType type) { return &rules[type]; }
 
 StatNodeList *create_empty_chunk()
 {
@@ -66,8 +71,8 @@ StatNodeList *parse_chunk()
 {
     StatNodeList *chunk = create_empty_chunk();
     StatNodeList *temp = NULL;
-    global_token = get_next_token();
-    TokenStruct token = global_token;
+    TokenStruct token = peek_next_token();
+
     while (1) {
         if (token.type == _EOF) {
             break;
@@ -90,165 +95,127 @@ StatNodeList *parse_chunk()
                 temp = new_node;
             }
         }
-        token = get_next_token();
-        global_token = token;
     }
     return chunk;
 }
 
 StatNode *parse_stat()
 {
+    TokenStruct token = consume_token();
+    // if (global_tracestack.last->error) {
+    //     terminate();
+    // }
     StatNode *stat = malloc(sizeof(StatNode));
-    switch (global_token.type) {
+    memset(stat, 0, sizeof(StatNode));
+    switch (token.type) {
     case IDENTIFIER:
-        parse_var_stat(stat);
+        parse_assignment_or_function_call(stat, token);
         break;
-    case LOCAL:
-        parse_localvar_stat(stat);
-        break;
+    // case LOCAL:
+    //     parse_localvar_stat(stat);
+    //     break;
     default:
         E(fprintf(
             stderr,
             "Syntax Error: Token does not match for the statement %d: %s\n",
-            global_token.type, global_token.literal));
+            token.type, token.literal));
         exit(1);
     };
     return stat;
 }
 
-void parse_var_stat(StatNode *stat)
+void parse_assignment_or_function_call(StatNode *stat, TokenStruct token)
 {
-    TokenStruct token = get_next_token();
-    stat->type = AssignmentStat;
-    stat->data.assingment_stat.var = (VarNode *)malloc(sizeof(VarNode *));
-    stat->data.assingment_stat.var->type = NameVar;
-    stat->data.assingment_stat.var->name = global_token.literal;
-    if (token.type == EQUAL) {
-        stat->data.assingment_stat.expr = parse_expr();
-    } else {
-        global_token = token;
-    }
-}
+    TokenStruct advance = peek_next_token();
 
-void parse_localvar_stat(StatNode *stat)
-{
-    stat->type = LocalVarListDefStat;
-    TokenStruct token = get_next_token();
-    stat->data.localvarlist_stat.namelist->name = token.literal;
-    if (token.type == EQUAL) {
-        stat->data.localvarlist_stat.expr = parse_expr();
-    } else {
-        global_token = token;
-    }
-}
-
-ExprNode *parse_expr()
-{
-    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode *));
-    TokenStruct token;
-    switch (global_token.type) {
-    case NIL:
-        expr->type = NilExpr;
-        break;
-    case TRUE:
-    case FALSE:
-        expr->type = BooleanExpr;
-        break;
-    case LITERAL_NUMBER:
-        token = get_next_token();
-        switch (token.type) {
-        case ADD:
-        case SUB:
-        case MUL:
-        case DIV:
-        case EQUAL_EQUAL:
-        case NOT_EQUAL:
-        case AND:
-        case OR:
-            expr->type = BinaryExpr;
-            expr->data.binary_expr.left = parse_expr();
-            parse_binaryop_expr(expr, token.type);
-            break;
-        default:
-            expr->type = NumberExpr;
-            expr->data.number_expr = (double)atoi(global_token.literal);
-            global_token = token;
-            break;
-        };
-        break;
-    case LITERAL_STRING:
-        expr->type = StringExpr;
-        expr->data.string_expr = global_token.literal;
-        break;
-    case IDENTIFIER:
-    case LPAREN:
-        expr->type = PrefixExpr;
-        parse_prefix_expr(expr);
-        break;
-    case SUB:
-    case NOT:
-    case HASH:
-        parse_unaryop_expr(expr, global_token.type);
-        break;
-    default:
-        E(fprintf(stderr,
-                  "Syntax Error: Token Type should be a one of ExprType"));
+    switch (advance.type) {
+    case EQUAL:
+    case COMMA: {
+        /* Assignment */
+        stat->type = AssignmentStat;
+        stat->data.assingment_stat.var = malloc(sizeof(VarNode));
+        stat->data.assingment_stat.var->name = token.literal;
+        stat->data.assingment_stat.var->type = NameVar;
+        /*TODO: Add a while loop here to implement Multiple assingments
+         * Check if the next type is comma or equal according to that
+         * you can implement what to do if we have equal or comma after a new
+         * identifier
+         */
+        if (advance.type == COMMA) {
+            printf("TODO: Multiple assingments not implemented\n");
+            exit(1);
+            token = consume_token();
+            advance = peek_next_token();
+            while (1) {
+                if (advance.type == IDENTIFIER) {
+                    /* Var, Var */
+                    token = consume_token();
+                } else {
+                    terminate();
+                }
+            }
+        } else {
+            token = consume_token(); /* token = EQUAL */
+            stat->data.assingment_stat.expr =
+                parse_expr(NULL, peek_next_token().type, PREC_NULL);
+        }
+    } break;
+    case LPAREN: {
+        stat->type = FunctionCallStat;
+        printf("TODO: function call to be implemented\n");
         exit(1);
+    } break;
+    default:
+        break;
+    };
+}
+
+ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence)
+{
+    TokenStruct token = consume_token(); /* token = IDENTIFIER | LITERAL_NUMBER
+                                            | LITERAL_STRING */
+    PrefixFn prefix_rule = get_rule(type)->prefix;
+    if (prefix_rule == NULL) {
+        E(fprintf(stderr, "No prefix rule found\n"));
+        return expr;
     }
+
+    ExprNode *left = prefix_rule(token, precedence);
+    while (precedence < get_rule(peek_next_token().type)->precedence) {
+        token = peek_next_token();
+        ExprNode *left =
+            get_rule(token.type)
+                ->infix(left, token.type, get_rule(token.type)->precedence);
+    }
+    return left;
+}
+
+ExprNode *parse_number_expr(TokenStruct token, OpPrecedence precedence)
+{
+    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
+    expr->type = NumberExpr;
+    char *endptr;
+    expr->data.number_expr = strtod(token.literal, &endptr);
+    printf("%d\n", precedence);
     return expr;
 }
 
-ExprNode *parse_binaryop_expr(ExprNode *expr, int binop_type)
+ExprNode *parse_string_expr(TokenStruct token, OpPrecedence precedence)
 {
-    switch (binop_type) {
-    case ADD:
-        expr->data.binary_expr.op = "+";
-        break;
-    case SUB:
-        expr->data.binary_expr.op = "-";
-        break;
-    case MUL:
-        expr->data.binary_expr.op = "*";
-        break;
-    case DIV:
-        expr->data.binary_expr.op = "/";
-        break;
-    case EQUAL_EQUAL:
-        expr->data.binary_expr.op = "==";
-        break;
-    case NOT_EQUAL:
-        expr->data.binary_expr.op = "~=";
-        break;
-    case AND:
-        expr->data.binary_expr.op = "and";
-        break;
-    case OR:
-        expr->data.binary_expr.op = "or";
-        break;
-    };
-    expr->data.binary_expr.right = parse_expr();
+    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
+    expr->type = StringExpr;
+    expr->data.string_expr = token.literal;
+    printf("%d\n", precedence);
+    return expr;
 }
 
-void parse_unaryop_expr(ExprNode *expr, int unaryop)
+ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type,
+                              OpPrecedence precedence)
 {
-    switch (unaryop) {
-    case SUB:
-        expr->data.unary_expr.op = "-";
-        break;
-    case HASH:
-        expr->data.unary_expr.op = "#";
-        break;
-    case NOT:
-        expr->data.unary_expr.op = "not";
-        break;
-    }
-    expr->data.unary_expr.right = parse_expr();
-}
-
-void parse_prefix_expr(ExprNode *expr)
-{
-    expr->data.prefix_expr_var = (VarNode *)malloc(sizeof(VarNode *));
-    expr->data.prefix_expr_var->name = global_token.literal;
-    expr->data.prefix_expr_var->type = NameVar;
-    global_token = get_next_token();
+    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
+    expr->type = BinaryExpr;
+    expr->data.binary_expr.left = left;
+    expr->data.binary_expr.op = type;
+    expr->data.binary_expr.right = parse_expr(NULL, type, precedence);
+    return expr;
 }

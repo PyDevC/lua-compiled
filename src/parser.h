@@ -4,16 +4,8 @@
 #include "lexer.h"
 #include <stdbool.h>
 
-/* Forward Declarations */
-typedef struct StatNodeList StatNodeList; /* Chunk or Block */
-typedef struct StatNode StatNode;
-typedef struct ExprNode ExprNode;
-typedef struct NameList NameList;
-typedef struct VarNode VarNode;
-typedef struct ExprNode *(*PrefixFn)(TokenType type);
-typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type);
-
 typedef enum {
+    PREC_NULL,
     PREC_NIL,
     PREC_OR,
     PREC_AND,
@@ -22,6 +14,17 @@ typedef enum {
     PREC_POW,
     PREC_UNARY
 } OpPrecedence;
+
+/* Forward Declarations */
+typedef struct StatNodeList StatNodeList; /* Chunk or Block */
+typedef struct StatNode StatNode;
+typedef struct ExprNode ExprNode;
+typedef struct NameList NameList;
+typedef struct VarNode VarNode;
+typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
+                                     OpPrecedence precedence);
+typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type,
+                                    OpPrecedence precedence);
 
 struct ExprNode
 {
@@ -43,7 +46,7 @@ struct ExprNode
 
         struct
         {
-            char *op;
+            TokenType op;
             ExprNode *left;
             ExprNode *right;
         } binary_expr;
@@ -68,6 +71,7 @@ struct StatNode
     enum {
         AssignmentStat,
         LocalVarListDefStat,
+        FunctionCallStat,
     } type;
 
     union

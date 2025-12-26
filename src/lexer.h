@@ -9,26 +9,26 @@
 extern FILE *f;
 
 typedef enum {
-    ILLEGAL,
     /* 0 */ /* ILLEGAL should be first */
+    ILLEGAL,
     _EOF,
     COMMA,
     HASH,
-    LPAREN,
     /* 4 */ /* Control Flow symbols */
+    LPAREN,
     RPAREN,
     LBRACE,
     RBRACE,
     LBRACKET,
     RBRACKET,
     SEMICOLON,
-    EQUAL,
     /* 12 */ /* Comparision Symbols */
+    EQUAL,
     EQUAL_EQUAL,
     NOT_EQUAL,
     BANG,
-    AND,
     /* 16 */ /* 22 Keywords */
+    AND,
     BREAK,
     DO,
     ELSE,
@@ -50,13 +50,13 @@ typedef enum {
     TRUE,
     UNTIL,
     WHILE,
-    ADD,
     /* 38 */ /* Arithmetic Symbols */
+    ADD,
     SUB,
     MUL,
     DIV,
-    LITERAL_NUMBER,
     /* 42 */ /* Misc */
+    LITERAL_NUMBER,
     LITERAL_STRING,
     IDENTIFIER,
 } TokenType;

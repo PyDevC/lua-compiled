@@ -204,7 +204,7 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
         exit(1);
     }
 
-    fprintf(stdout, "Just for test we have precedence: %d\n", precedence);
+    D(fprintf(stdout, "Just for test we have precedence: %d\n", precedence));
     return expr;
 }
 

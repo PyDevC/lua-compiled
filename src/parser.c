@@ -121,6 +121,14 @@ StatNode *parse_stat()
             exit(1);
         }
     } break;
+    case LOCAL: {
+        if (peek_next_token().type == IDENTIFIER) {
+            token = consume_token(); /* IDENTIFIER */
+            if (peek_next_token().type == EQUAL) {
+                parse_assignment_stat(stat, token);
+            }
+        }
+    } break;
     default:
         E(fprintf(stderr, "Syntax Error: Statment should not start with %s\n",
                   token.literal));
@@ -199,12 +207,11 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
     default:
         E(fprintf(stderr,
                   "Syntax Error: Expected a number, boolean, nil, identifer or "
-                  "string but got '%s'\n",
-                  token.literal));
+                  "string but got '%s' with precedence '%d'\n",
+                  token.literal, precedence));
         exit(1);
     }
 
-    D(fprintf(stdout, "Just for test we have precedence: %d\n", precedence));
     return expr;
 }
 

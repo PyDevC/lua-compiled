@@ -308,6 +308,10 @@ TokenStruct consume_token()
         has_peeked = 0;
         return peeked_token;
     }
+    /* Print the Token in Debug mode */
+    D(TokenStruct token = get_next_token());
+    D(fprintf(stdout, "Consumed Token -> %s, %d\n", token.literal, token.type));
+    D(return token);
     return get_next_token();
 }
 

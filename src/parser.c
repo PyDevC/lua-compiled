@@ -14,7 +14,7 @@ void parse_assignment_stat(StatNode *stat, TokenStruct token);
 /* a = 10 */
 
 /* Expr functions */
-ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence);
+ExprNode *parse_expr(OpPrecedence precedence);
 /* Parse Expression and use get_rule to tell which rult to apply */
 
 ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
@@ -137,17 +137,17 @@ void parse_assignment_stat(StatNode *stat, TokenStruct token)
      **/
     stat->data.assingment_stat.var = malloc(sizeof(VarNode));
     stat->data.assingment_stat.var->name = token.literal;
+    consume_token(); /* consume equal */
     stat->data.assingment_stat.expr = malloc(sizeof(ExprNode));
-    stat->data.assingment_stat.expr =
-        parse_expr(stat->data.assingment_stat.expr, token.type, 0.0);
+    stat->data.assingment_stat.expr = parse_expr(0.0);
 }
 
-ExprNode *parse_expr(ExprNode *expr, TokenType type, OpPrecedence precedence)
+ExprNode *parse_expr(OpPrecedence precedence)
 {
     /**
      *
      **/
-    TokenStruct token = peek_next_token(); /* First Token After EQUAL */
+    TokenStruct token = consume_token(); /* First Token After EQUAL */
     PrefixFn prefix_rule = get_rule(token.type)->prefix;
     if (prefix_rule == NULL) {
         E(fprintf(stderr, "Syntax Error: No prefix rule for Token: '%s'\n",
@@ -208,13 +208,12 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
     return expr;
 }
 
-ExprNode *parse_binaryop_expr(ExprNode *left, TokenType type,
-                              OpPrecedence precedence)
+ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
+                            OpPrecedence precedence)
 {
     ExprNode *expr = malloc(sizeof(ExprNode));
-    ExprNode *right = malloc(sizeof(ExprNode));
     expr->data.binary_expr.left = left;
     expr->data.binary_expr.op = type;
-    expr->data.binary_expr.right = parse_expr(right, type, precedence);
+    expr->data.binary_expr.right = parse_expr(precedence);
     return expr;
 }

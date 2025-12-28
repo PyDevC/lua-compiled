@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         init_trace_stack(&global_tracestack, filename);
         init_lexer(filename);
         StatNodeList *chunk = parse_chunk();
-        printf("%d ", chunk->stat->type);
+        printf("%p", chunk);
         return 0;
     }
 }

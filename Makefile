@@ -28,3 +28,4 @@ fmt:
 
 test: 
 	build/lua ./testfiles/assignment.lua
+	build/lua ./testfiles/controlflow.lua

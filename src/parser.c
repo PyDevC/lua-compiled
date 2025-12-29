@@ -12,6 +12,15 @@ StatNodeList *parse_chunk();
 StatNode *parse_stat();
 void parse_assignment_stat(StatNode *stat, TokenStruct token);
 /* a = 10 */
+void parse_if_else_stat(StatNode *stat, TokenStruct token);
+/* if a == 1 then
+ *     a = 2
+ *  elseif a == 2 then
+ *     a = 1
+ *  else
+ *     a = 0
+ *  end
+ */
 
 /* Expr functions */
 ExprNode *parse_expr(OpPrecedence precedence);
@@ -48,6 +57,10 @@ ParseRule rules[] = {
     [SUB] = {NULL, parse_binary_expr, PREC_ADDSUB},
     [MUL] = {NULL, parse_binary_expr, PREC_MULDIV},
     [DIV] = {NULL, parse_binary_expr, PREC_MULDIV},
+
+    /* Comparision Rules */
+    [EQUAL_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [NOT_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
 };
 
 ParseRule *get_rule(TokenType type)
@@ -71,12 +84,17 @@ StatNodeList *parse_chunk()
 {
     StatNodeList *chunk = create_empty_chunk();
     StatNodeList *temp = NULL;
+    TokenStruct token;
 
     while (peek_next_token().type != _EOF) {
-        if (peek_next_token().type == ILLEGAL) {
+        token = peek_next_token();
+        if (token.type == ILLEGAL) {
             E(fprintf(stderr, "Syntax Error: %s is unexpected\n",
                       peek_next_token().literal));
             exit(1);
+        } else if (token.type == END || token.type == ELSEIF ||
+                   token.type == ELSE) {
+            break;
         }
 
         StatNode *stat = parse_stat();
@@ -129,6 +147,9 @@ StatNode *parse_stat()
             }
         }
     } break;
+    case IF: {
+        parse_if_else_stat(stat, token);
+    } break;
     default:
         E(fprintf(stderr, "Syntax Error: Statment should not start with %s\n",
                   token.literal));
@@ -148,6 +169,58 @@ void parse_assignment_stat(StatNode *stat, TokenStruct token)
     consume_token(); /* consume equal */
     stat->data.assingment_stat.expr = malloc(sizeof(ExprNode));
     stat->data.assingment_stat.expr = parse_expr(0.0);
+}
+
+void parse_if_else_stat(StatNode *stat, TokenStruct token)
+{
+    /**
+     * parse_if_else_stat check all the valid conditions in their respective
+     * functions, here we just structure the code in 'if else' construct
+     **/
+    stat->data.if_else_stat.if_branches = malloc(sizeof(IfBlockNode));
+    stat->data.if_else_stat.if_branches->condition = parse_expr(0.0);
+    token = consume_token(); /* Consume then */
+    if (token.type == THEN) {
+        stat->data.if_else_stat.if_branches->block = parse_chunk();
+    } else {
+        E(fprintf(
+            stderr,
+            "Syntax Error: Expected 'then' after if statment but got '%s'\n",
+            token.literal));
+        exit(1);
+    }
+    token = consume_token(); /* Either elseif, else or end */
+    stat->data.if_else_stat.if_branches->next =
+        NULL; /* It is important to keep it NULL cause we can use NULL in
+                 traversal */
+    while (token.type == ELSEIF) {
+        IfBlockNode *elseif = malloc(sizeof(IfBlockNode));
+        elseif->condition = parse_expr(0.0);
+        token = consume_token(); /* Consume then */
+        if (token.type == THEN) {
+            elseif->block = parse_chunk();
+        } else {
+            E(fprintf(stderr,
+                      "Syntax Error: Expected 'then' after if statment but got "
+                      "'%s'\n",
+                      token.literal));
+            exit(1);
+        }
+        stat->data.if_else_stat.if_branches->next = elseif;
+        elseif->next = NULL;
+        token = consume_token(); /* Either elseif, else or end  */
+    }
+    if (token.type == ELSE) {
+        stat->data.if_else_stat.else_block = parse_chunk();
+        token = consume_token(); /* end */
+    }
+    if (token.type != END) {
+        E(fprintf(stderr,
+                  "Syntax Error: Expected 'end' but got "
+                  "'%s'\n",
+                  token.literal));
+        exit(1);
+    }
 }
 
 ExprNode *parse_expr(OpPrecedence precedence)

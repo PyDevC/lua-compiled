@@ -59,14 +59,8 @@ int fill_buffer(int bufno)
     size_t read_counter = fread(&buffer[idx], 1, READBUFFER_SIZE, f);
 
     buffer[idx + (int)read_counter] = '\0';
-    /*Ending should be NULL character to determine whether we have
-               reached end of buffer or not*/
 
-    if (read_counter < READBUFFER_SIZE) {
-        return 0;
-    }
-
-    return 1;
+    return (read_counter > 0);
 }
 
 char get_next_char()
@@ -75,7 +69,7 @@ char get_next_char()
 
     if (c == '\0') {
         /* Here bufno shows what part of buffer we are at */
-        int bufno = (forward >= &buffer[READBUFFER_SIZE]) ? 1 : 0;
+        int bufno = (forward >= &buffer[TOTALREADBUFFER_SIZE]) ? 1 : 0;
         if (bufno == 0) {
             forward = &buffer[READBUFFER_SIZE];
         } else {
@@ -97,11 +91,23 @@ char get_next_char()
     return c;
 }
 
-char peek_next_char() { return *forward; }
+char peek_next_char()
+{
+    char c = *forward;
+    if (c == '\0') {
+        c = get_next_char();
+        return c;
+    }
+    return *forward;
+}
 
 void skip_whitespaces()
 {
     char c = get_next_char();
+    if (c == EOF) {
+        *forward = EOF;
+        return;
+    }
     while (is_blank(c)) {
         c = get_next_char();
     }
@@ -112,11 +118,14 @@ void skip_comments()
 {
     // only single line comments supported
     char c = get_next_char();
+    if (c == EOF) {
+        return;
+    }
     if (c == '-') {
         if (peek_next_char() == '-') {
             c = get_next_char();
             while (1) {
-                if (c == '\n' || c == EOF) {
+                if (c == '\n') {
                     skip_comments();
                     return;
                 }
@@ -196,8 +205,7 @@ TokenStruct read_number()
 
         get_next_char();
     }
-    TokenStruct token = make_token(LITERAL_NUMBER);
-    return token;
+    return make_token(LITERAL_NUMBER);
 }
 
 TokenStruct scantoken_symbol(char c)
@@ -230,6 +238,7 @@ TokenStruct scantoken_symbol(char c)
         break;
     case '~':
         if (peek_next_char() == '=') {
+            get_next_char();
             token = make_token(NOT_EQUAL);
             break;
         }
@@ -255,6 +264,7 @@ TokenStruct scantoken_symbol(char c)
         break;
     case '=':
         if (peek_next_char() == '=') {
+            get_next_char();
             token = make_token(EQUAL_EQUAL);
             break;
         }

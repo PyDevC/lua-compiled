@@ -20,7 +20,6 @@ int main(int argc, char **argv)
         return 1;
     } else if (argc == 2) {
         char *filename = argv[1];
-        init_trace_stack(&global_tracestack, filename);
         init_lexer(filename);
         StatNodeList *chunk = parse_chunk();
         printf("%p", chunk);

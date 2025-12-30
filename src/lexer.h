@@ -29,6 +29,10 @@ typedef enum {
     EQUAL_EQUAL,
     NOT_EQUAL,
     BANG,
+    GREATER_T,
+    GREATER_T_EQUAL,
+    LESS_T,
+    LESS_T_EQUAL,
     /* 16 */ /* 22 Keywords */
     AND,
     BREAK,

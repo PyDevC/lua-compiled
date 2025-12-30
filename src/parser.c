@@ -61,6 +61,10 @@ ParseRule rules[] = {
     /* Comparision Rules */
     [EQUAL_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
     [NOT_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [LESS_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [LESS_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [GREATER_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
 };
 
 ParseRule *get_rule(TokenType type)

@@ -270,6 +270,22 @@ TokenStruct scantoken_symbol(char c)
         }
         token = make_token(EQUAL);
         break;
+    case '<':
+        if (peek_next_char() == '=') {
+            get_next_char();
+            token = make_token(LESS_T_EQUAL);
+            break;
+        }
+        token = make_token(LESS_T);
+        break;
+    case '>':
+        if (peek_next_char() == '=') {
+            get_next_char();
+            token = make_token(GREATER_T_EQUAL);
+            break;
+        }
+        token = make_token(GREATER_T_EQUAL);
+        break;
     default:
         token = make_token(ILLEGAL);
         break;

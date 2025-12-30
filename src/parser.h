@@ -71,6 +71,11 @@ struct StatNode
             IfBlockNode *if_branches;
             StatNodeList *else_block;
         } if_else_stat;
+        struct
+        {
+            ExprNode *condition;
+            StatNodeList *while_block;
+        } while_stat;
     } data;
 };
 

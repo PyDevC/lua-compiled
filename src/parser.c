@@ -21,6 +21,12 @@ void parse_if_else_stat(StatNode *stat, TokenStruct token);
  *     a = 0
  *  end
  */
+void parse_while_stat(StatNode *stat, TokenStruct token);
+/* a = 1
+ * while a < 10 do
+ *     a = a + 1
+ * end
+ */
 
 /* Expr functions */
 ExprNode *parse_expr(OpPrecedence precedence);
@@ -154,6 +160,9 @@ StatNode *parse_stat()
     case IF: {
         parse_if_else_stat(stat, token);
     } break;
+    case WHILE: {
+        parse_while_stat(stat, token);
+    } break;
     default:
         E(fprintf(stderr, "Syntax Error: Statment should not start with %s\n",
                   token.literal));
@@ -218,6 +227,30 @@ void parse_if_else_stat(StatNode *stat, TokenStruct token)
         stat->data.if_else_stat.else_block = parse_chunk();
         token = consume_token(); /* end */
     }
+    if (token.type != END) {
+        E(fprintf(stderr,
+                  "Syntax Error: Expected 'end' but got "
+                  "'%s'\n",
+                  token.literal));
+        exit(1);
+    }
+}
+
+void parse_while_stat(StatNode *stat, TokenStruct token)
+{
+    stat->data.while_stat.condition = malloc(sizeof(ExprNode));
+    stat->data.while_stat.condition = parse_expr(0.0);
+    token = consume_token(); /* Consume do */
+    if (token.type == DO) {
+        stat->data.while_stat.while_block = parse_chunk();
+    } else {
+        E(fprintf(stderr,
+                  "Syntax Error: Expected 'do' after expression but got "
+                  "'%s'\n",
+                  token.literal));
+        exit(1);
+    }
+    token = consume_token();
     if (token.type != END) {
         E(fprintf(stderr,
                   "Syntax Error: Expected 'end' but got "

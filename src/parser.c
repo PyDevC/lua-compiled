@@ -27,6 +27,7 @@ void parse_while_stat(StatNode *stat, TokenStruct token);
  *     a = a + 1
  * end
  */
+void parse_function_call_stat(StatNode *stat, TokenStruct token);
 
 /* Expr functions */
 ExprNode *parse_expr(OpPrecedence precedence);
@@ -41,6 +42,9 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence);
 /* a = 10 or a = nil or a = "10" or a = true */
 ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence precedence);
 /* a = b */
+ExprNode *parse_function_call_expr(ExprNode *identifer, TokenType type,
+                                   OpPrecedence precedence);
+/* a = beta() */
 
 // TODO: ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence
 // precedence);
@@ -71,6 +75,9 @@ ParseRule rules[] = {
     [LESS_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
     [GREATER_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
     [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+
+    /* Misc */
+    [LPAREN] = {NULL, parse_function_call_expr, PREC_FUNC_CALL},
 };
 
 ParseRule *get_rule(TokenType type)
@@ -131,7 +138,10 @@ StatNode *parse_stat()
      *
      * Case IDENTIFER:
      *      Check if there is equal after it. If yes then parse as
-     * assignment_stat.
+     *      assignment_stat.
+     * Case LOCAL:
+     *      Check if there is some local variable. if yes then evaluate it
+     *      same as IDENTIFER
      *
      * @return StatNode
      **/
@@ -142,9 +152,12 @@ StatNode *parse_stat()
     case IDENTIFIER: {
         if (peek_next_token().type == EQUAL) {
             parse_assignment_stat(stat, token);
+        } else if (peek_next_token().type == LPAREN) {
+            parse_function_call_stat(stat, token);
         } else {
             E(fprintf(stderr,
-                      "Syntax Error: Expected '=' after Identifer '%s'\n",
+                      "Syntax Error: Expected '=' or functioncall after "
+                      "Identifer '%s'\n",
                       token.literal));
             exit(1);
         }
@@ -154,6 +167,14 @@ StatNode *parse_stat()
             token = consume_token(); /* IDENTIFIER */
             if (peek_next_token().type == EQUAL) {
                 parse_assignment_stat(stat, token);
+            } else if (peek_next_token().type == LPAREN) {
+                parse_function_call_stat(stat, token);
+            } else {
+                E(fprintf(stderr,
+                          "Syntax Error: Expected '=' or functioncall after "
+                          "Identifer '%s'\n",
+                          token.literal));
+                exit(1);
             }
         }
     } break;
@@ -260,6 +281,18 @@ void parse_while_stat(StatNode *stat, TokenStruct token)
     }
 }
 
+void parse_function_call_stat(StatNode *stat, TokenStruct token)
+{
+    stat->data.functioncall.func = malloc(sizeof(FunctionDefNode));
+    stat->data.functioncall.func->funcname = malloc(sizeof(VarNode));
+    stat->data.functioncall.func->funcname->name = token.literal;
+    consume_token(); /* Consume LPAREN */
+    token = peek_next_token();
+    if (token.type == RPAREN) {
+        consume_token(); /* Consume RPAREN */
+    }
+}
+
 ExprNode *parse_expr(OpPrecedence precedence)
 {
     /**
@@ -332,5 +365,26 @@ ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
     expr->data.binary_expr.left = left;
     expr->data.binary_expr.op = type;
     expr->data.binary_expr.right = parse_expr(precedence);
+    return expr;
+}
+
+ExprNode *parse_function_call_expr(ExprNode *identifier, TokenType type,
+                                   OpPrecedence precedence)
+{
+    consume_token();
+    if (type == LPAREN) {
+        return NULL;
+    }
+    ExprNode *expr = malloc(sizeof(ExprNode));
+    expr->data.functioncall.funcname = malloc(sizeof(VarNode));
+    expr->data.functioncall.funcname->name = identifier->data.var->name;
+    TokenStruct token = consume_token(); /* Consume RPAREN */
+    if (token.type != RPAREN) {
+        E(fprintf(stderr,
+                  "Syntax Error: Expected ')' after '(' in a function call "
+                  "but got '%s' with precedence '%d'\n",
+                  token.literal, precedence));
+        exit(1);
+    }
     return expr;
 }

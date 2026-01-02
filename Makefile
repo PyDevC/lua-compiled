@@ -31,3 +31,4 @@ test:
 	build/lua ./testfiles/controlflow.lua
 	build/lua ./testfiles/expressions.lua
 	build/lua ./testfiles/loops.lua
+	build/lua ./testfiles/function.lua

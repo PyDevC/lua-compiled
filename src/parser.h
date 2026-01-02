@@ -9,7 +9,8 @@ typedef enum {
     PREC_COMP_EQUAL,
     PREC_ADDSUB,
     PREC_MULDIV,
-    PREC_UNARY
+    PREC_UNARY,
+    PREC_FUNC_CALL,
 } OpPrecedence;
 
 /* Forward Declarations */
@@ -18,6 +19,7 @@ typedef struct StatNode StatNode;
 typedef struct ExprNode ExprNode;
 typedef struct VarNode VarNode;
 typedef struct IfBlockNode IfBlockNode;
+typedef struct FunctionDefNode FunctionDefNode;
 
 /* Function pointers to call the parser_function for desired token */
 typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
@@ -49,12 +51,23 @@ struct ExprNode
             ExprNode *right;
         } unary_expr;
 
+        struct
+        {
+            VarNode *funcname;
+        } functioncall;
+
     } data;
 };
 
 struct VarNode
 {
     char *name;
+};
+
+struct VarNodeList
+{
+    VarNode *var;
+    VarNode *next;
 };
 
 struct StatNode
@@ -76,6 +89,10 @@ struct StatNode
             ExprNode *condition;
             StatNodeList *while_block;
         } while_stat;
+        struct
+        {
+            FunctionDefNode *func;
+        } functioncall;
     } data;
 };
 
@@ -90,6 +107,13 @@ struct StatNodeList
 {
     StatNode *stat;
     StatNodeList *next;
+};
+
+struct FunctionDefNode
+{
+    VarNode *funcname;
+    /* Added parameter list in future */
+    StatNodeList *body;
 };
 
 typedef struct

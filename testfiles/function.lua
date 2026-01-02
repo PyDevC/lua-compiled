@@ -1,4 +1,1 @@
-local this = function() end
-
-function A()
-end
+funccall() -- basic function call

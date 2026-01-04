@@ -401,6 +401,8 @@ ExprNode *parse_function_call_expr(ExprNode *identifier, TokenStruct token,
     return expr;
 }
 
+#ifdef DEBUG_LUA
+
 /* Traverse Tree */
 void traverse_stat_node_list(StatNodeList *chunk);
 void traverse_stat_node(StatNode *stat);
@@ -495,3 +497,5 @@ void traverse_if_else_stat(IfBlockNode *if_branches)
 {
     printf("%p\n", if_branches);
 }
+
+#endif

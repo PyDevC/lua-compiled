@@ -2,6 +2,7 @@
 #include "errors.h"
 #include "lexer.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,7 +34,7 @@ void parse_function_call_stat(StatNode *stat, TokenStruct token);
 ExprNode *parse_expr(OpPrecedence precedence);
 /* Parse Expression and use get_rule to tell which rult to apply */
 
-ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
+ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
                             OpPrecedence precedence);
 /* a = a + b */
 ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence precedence);
@@ -42,7 +43,7 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence);
 /* a = 10 or a = nil or a = "10" or a = true */
 ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence precedence);
 /* a = b */
-ExprNode *parse_function_call_expr(ExprNode *identifer, TokenType type,
+ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
                                    OpPrecedence precedence);
 /* a = beta() */
 
@@ -77,7 +78,7 @@ ParseRule rules[] = {
     [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
 
     /* Misc */
-    [LPAREN] = {NULL, parse_function_call_expr, PREC_FUNC_CALL},
+    [LPAREN] = {NULL, parse_function_call_expr, PREC_NIL},
 };
 
 ParseRule *get_rule(TokenType type)
@@ -199,9 +200,9 @@ void parse_assignment_stat(StatNode *stat, TokenStruct token)
      * assingment_stat node as two children: VarNode and ExprNode.
      **/
     stat->data.assingment_stat.var = malloc(sizeof(VarNode));
+    stat->type = AssignmentStat;
     stat->data.assingment_stat.var->name = token.literal;
     consume_token(); /* consume equal */
-    stat->data.assingment_stat.expr = malloc(sizeof(ExprNode));
     stat->data.assingment_stat.expr = parse_expr(0.0);
 }
 
@@ -213,6 +214,7 @@ void parse_if_else_stat(StatNode *stat, TokenStruct token)
      **/
     stat->data.if_else_stat.if_branches = malloc(sizeof(IfBlockNode));
     stat->data.if_else_stat.if_branches->condition = parse_expr(0.0);
+    stat->type = IfElseStat;
     token = consume_token(); /* Consume then */
     if (token.type == THEN) {
         stat->data.if_else_stat.if_branches->block = parse_chunk();
@@ -261,6 +263,7 @@ void parse_while_stat(StatNode *stat, TokenStruct token)
 {
     stat->data.while_stat.condition = malloc(sizeof(ExprNode));
     stat->data.while_stat.condition = parse_expr(0.0);
+    stat->type = WhileLoopStat;
     token = consume_token(); /* Consume do */
     if (token.type == DO) {
         stat->data.while_stat.while_block = parse_chunk();
@@ -286,6 +289,7 @@ void parse_function_call_stat(StatNode *stat, TokenStruct token)
     stat->data.functioncall.func = malloc(sizeof(FunctionDefNode));
     stat->data.functioncall.func->funcname = malloc(sizeof(VarNode));
     stat->data.functioncall.func->funcname->name = token.literal;
+    stat->type = FunctionCAllStat;
     consume_token(); /* Consume LPAREN */
     token = peek_next_token();
     if (token.type == RPAREN) {
@@ -318,7 +322,7 @@ ExprNode *parse_expr(OpPrecedence precedence)
             return left_expr;
         }
         left_expr =
-            infix_rule(left_expr, token.type, get_rule(token.type)->precedence);
+            infix_rule(left_expr, token, get_rule(token.type)->precedence);
     }
     return left_expr;
 }
@@ -328,23 +332,29 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
     ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
     switch (token.type) {
     case LITERAL_STRING: {
+        expr->type = StringExpr;
         expr->data.literalstring = token.literal;
     } break;
     case LITERAL_NUMBER: {
         char *end_ptr;
+        expr->type = NumberExpr;
         expr->data.literalnumber = strtod(token.literal, &end_ptr);
     } break;
     case IDENTIFIER: {
         expr->data.var = malloc(sizeof(VarNode));
+        expr->type = VariableExpr;
         expr->data.var->name = token.literal;
     } break;
     case NIL: {
+        expr->type = NilExpr;
         expr->data.isnil = 1;
     } break;
     case TRUE: {
+        expr->type = BooleanExpr;
         expr->data.boolean = 1;
     } break;
     case FALSE: {
+        expr->type = BooleanExpr;
         expr->data.boolean = 0;
     } break;
     default:
@@ -358,27 +368,29 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
     return expr;
 }
 
-ExprNode *parse_binary_expr(ExprNode *left, TokenType type,
+ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
                             OpPrecedence precedence)
 {
     ExprNode *expr = malloc(sizeof(ExprNode));
+    expr->type = BinaryExpr;
     expr->data.binary_expr.left = left;
-    expr->data.binary_expr.op = type;
+    expr->data.binary_expr.op = *token.literal;
     expr->data.binary_expr.right = parse_expr(precedence);
     return expr;
 }
 
-ExprNode *parse_function_call_expr(ExprNode *identifier, TokenType type,
+ExprNode *parse_function_call_expr(ExprNode *identifier, TokenStruct token,
                                    OpPrecedence precedence)
 {
     consume_token();
-    if (type == LPAREN) {
+    if (token.type == LPAREN) {
         return NULL;
     }
     ExprNode *expr = malloc(sizeof(ExprNode));
     expr->data.functioncall.funcname = malloc(sizeof(VarNode));
+    expr->type = FunctionCallExpr;
     expr->data.functioncall.funcname->name = identifier->data.var->name;
-    TokenStruct token = consume_token(); /* Consume RPAREN */
+    token = consume_token(); /* Consume RPAREN */
     if (token.type != RPAREN) {
         E(fprintf(stderr,
                   "Syntax Error: Expected ')' after '(' in a function call "
@@ -387,4 +399,99 @@ ExprNode *parse_function_call_expr(ExprNode *identifier, TokenType type,
         exit(1);
     }
     return expr;
+}
+
+/* Traverse Tree */
+void traverse_stat_node_list(StatNodeList *chunk);
+void traverse_stat_node(StatNode *stat);
+void traverse_expr(ExprNode *expr);
+void traverse_if_else_stat(IfBlockNode *if_branches);
+void traverse_functioncall_node(FunctionDefNode *func);
+
+void traverse_stat_node_list(StatNodeList *chunk)
+{
+    StatNodeList *temp = chunk;
+    while (temp != NULL) {
+        if (temp->stat == NULL) {
+            D(fprintf(stdout, "temp->stat->NULL\n"));
+            break;
+        } else {
+            // Branch from where
+            traverse_stat_node(temp->stat);
+        }
+        temp = temp->next;
+    }
+}
+
+void traverse_stat_node(StatNode *stat)
+{
+    /* Check if any node is non-empty */
+    if (stat->type == AssignmentStat) {
+        printf("stat->data.assingment_stat.var->name->%s\n",
+               stat->data.assingment_stat.var->name);
+        printf("stat->data.assingment_stat.var->expr->");
+        assert(stat->data.assingment_stat.expr != NULL);
+        traverse_expr(stat->data.assingment_stat.expr);
+
+    } else if (stat->type == IfElseStat) {
+        traverse_if_else_stat(stat->data.if_else_stat.if_branches);
+        printf("stat->data.if_else_stat.else_block->\n");
+        traverse_stat_node_list(stat->data.if_else_stat.else_block);
+
+    } else if (stat->type == WhileLoopStat) {
+        traverse_expr(stat->data.while_stat.condition);
+        traverse_stat_node_list(stat->data.while_stat.while_block);
+
+    } else if (stat->type == FunctionCAllStat) {
+        traverse_functioncall_node(stat->data.functioncall.func);
+
+    } else {
+        D(fprintf(stdout, "stat->NULL\n"));
+        return;
+    }
+}
+
+void traverse_expr(ExprNode *expr)
+{
+    switch (expr->type) {
+    case NumberExpr:
+        printf("data.literalnumber = '%F'\n", expr->data.literalnumber);
+        break;
+    case StringExpr:
+        printf("data.literalstring = '%s'\n", expr->data.literalstring);
+        break;
+    case BooleanExpr:
+        printf("data.boolean = '%d'\n", expr->data.boolean);
+        break;
+    case VariableExpr:
+        printf("data.var->name = '%s'\n", expr->data.var->name);
+        break;
+    case NilExpr:
+        printf("data.isnil = '%d'\n", expr->data.isnil);
+        break;
+    case FunctionCallExpr:
+        printf("data.functioncall.funcname->name = '%s'\n",
+               expr->data.functioncall.funcname->name);
+        break;
+    default: {
+        if (expr->type == BinaryExpr) {
+            printf("data.binary_expr->left->");
+            traverse_expr(expr->data.binary_expr.left);
+            printf("data.binary_expr.op = '%c'\n", expr->data.binary_expr.op);
+            printf("data.binary_expr->right->");
+            traverse_expr(expr->data.binary_expr.right);
+        }
+    } break;
+    };
+}
+
+void traverse_functioncall_node(FunctionDefNode *func)
+{
+    printf("func->funcname->name = '%s'\n", func->funcname->name);
+    traverse_stat_node_list(func->body);
+}
+
+void traverse_if_else_stat(IfBlockNode *if_branches)
+{
+    printf("%p\n", if_branches);
 }

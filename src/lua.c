@@ -22,7 +22,7 @@ int main(int argc, char **argv)
         char *filename = argv[1];
         init_lexer(filename);
         StatNodeList *chunk = parse_chunk();
-        printf("%p\n", chunk);
+        traverse_stat_node_list(chunk);
         return 0;
     }
 }

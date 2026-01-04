@@ -4,13 +4,16 @@
 #include "lexer.h"
 #include <stdbool.h>
 
+typedef struct location_t location_t;
+
 typedef enum {
-    PREC_NIL,
-    PREC_COMP_EQUAL,
-    PREC_ADDSUB,
-    PREC_MULDIV,
-    PREC_UNARY,
-    PREC_FUNC_CALL,
+    PREC_NIL,        /* Lowest */
+    PREC_LOGOR,      /* or */
+    PREC_LOGAND,     /* and */
+    PREC_COMP_EQUAL, /* > < >= <= */
+    PREC_ADDSUB,     /* + - */
+    PREC_MULDIV,     /* * / */
+    PREC_UNARY,      /* # ! */
 } OpPrecedence;
 
 /* Forward Declarations */
@@ -24,11 +27,21 @@ typedef struct FunctionDefNode FunctionDefNode;
 /* Function pointers to call the parser_function for desired token */
 typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
                                      OpPrecedence precedence);
-typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenType type,
+typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenStruct token,
                                     OpPrecedence precedence);
 
 struct ExprNode
 {
+    enum {
+        NumberExpr,
+        StringExpr,
+        NilExpr,
+        BooleanExpr,
+        VariableExpr,
+        BinaryExpr,
+        UnaryExpr,
+        FunctionCallExpr
+    } type;
     union
     {
         double literalnumber; /* Convert litearl string to double before adding
@@ -72,6 +85,7 @@ struct VarNodeList
 
 struct StatNode
 {
+    enum { AssignmentStat, IfElseStat, WhileLoopStat, FunctionCAllStat } type;
     union
     {
         struct
@@ -124,5 +138,6 @@ typedef struct
 } ParseRule;
 
 StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
+void traverse_stat_node_list(StatNodeList *chunk);
 
 #endif // PARSER_H

@@ -7,6 +7,24 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Pratt Parsing Operator precedence */
+typedef enum {
+    PREC_NIL,        /* Lowest */
+    PREC_LOGOR,      /* or */
+    PREC_LOGAND,     /* and */
+    PREC_COMP_EQUAL, /* > < >= <= */
+    PREC_ADDSUB,     /* + - */
+    PREC_MULDIV,     /* * / */
+    PREC_UNARY,      /* # ! */
+} OpPrecedence;
+
+/* Pratt Parser ExprNode function pointers to call based on infix and prefix
+ * expression */
+typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
+                                     OpPrecedence precedence);
+typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenStruct token,
+                                    OpPrecedence precedence);
+
 /* Helper Functions Forward Declaration */
 StatNodeList *parse_chunk();
 
@@ -51,11 +69,18 @@ ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
 ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
 /* (a + b) + c */
 
-/* Parsing Rules */
+/* Parse Rules for Pratt expresssion parsing */
+typedef struct
+{
+    PrefixFn prefix;
+    InfixFn infix;
+    OpPrecedence precedence;
+} ParseRule;
+
 ParseRule rules[] = {
-    /* Literal and Grouping Rules */
     /* [TokenType] = {PrefixFn, InfixFn, precedence}, */
 
+    /* Literal and Grouping Rules */
     [LITERAL_NUMBER] = {parse_constant_expr, NULL, PREC_NIL},
     [LITERAL_STRING] = {parse_constant_expr, NULL, PREC_NIL},
     [IDENTIFIER] = {parse_constant_expr, NULL, PREC_NIL},

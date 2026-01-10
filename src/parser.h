@@ -4,17 +4,7 @@
 #include "lexer.h"
 #include <stdbool.h>
 
-typedef struct location_t location_t;
-
-typedef enum {
-    PREC_NIL,        /* Lowest */
-    PREC_LOGOR,      /* or */
-    PREC_LOGAND,     /* and */
-    PREC_COMP_EQUAL, /* > < >= <= */
-    PREC_ADDSUB,     /* + - */
-    PREC_MULDIV,     /* * / */
-    PREC_UNARY,      /* # ! */
-} OpPrecedence;
+typedef struct Parser Parser;
 
 /* Forward Declarations */
 typedef struct StatNodeList StatNodeList; /* Chunk or Block */
@@ -25,10 +15,6 @@ typedef struct IfBlockNode IfBlockNode;
 typedef struct FunctionDefNode FunctionDefNode;
 
 /* Function pointers to call the parser_function for desired token */
-typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
-                                     OpPrecedence precedence);
-typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenStruct token,
-                                    OpPrecedence precedence);
 
 struct ExprNode
 {
@@ -129,13 +115,6 @@ struct FunctionDefNode
     /* Added parameter list in future */
     StatNodeList *body;
 };
-
-typedef struct
-{
-    PrefixFn prefix;
-    InfixFn infix;
-    OpPrecedence precedence;
-} ParseRule;
 
 StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
 void traverse_stat_node_list(StatNodeList *chunk);

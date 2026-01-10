@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "errors.h"
 #include "lexer.h"
+#include "symboltable.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -47,8 +48,7 @@ ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
                                    OpPrecedence precedence);
 /* a = beta() */
 
-// TODO: ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence
-// precedence);
+ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
 /* (a + b) + c */
 
 /* Parsing Rules */
@@ -78,7 +78,7 @@ ParseRule rules[] = {
     [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
 
     /* Misc */
-    [LPAREN] = {NULL, parse_function_call_expr, PREC_NIL},
+    [LPAREN] = {parse_grouping_expr, parse_function_call_expr, PREC_NIL},
 };
 
 ParseRule *get_rule(TokenType type)
@@ -365,6 +365,20 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
         exit(1);
     }
 
+    return expr;
+}
+
+ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence)
+{
+    ExprNode *expr = parse_expr(PREC_NIL);
+    token = consume_token();
+    if (token.type != RPAREN) {
+        E(fprintf(stderr,
+                  "Syntax Error: Expected ')' for '(' but got '%s', with "
+                  "precedence '%d'",
+                  token.literal, precedence));
+        exit(1);
+    }
     return expr;
 }
 

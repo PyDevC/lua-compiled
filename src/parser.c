@@ -9,21 +9,26 @@
 
 /* Pratt Parsing Operator precedence */
 typedef enum {
-    PREC_NIL,        /* Lowest */
-    PREC_LOGOR,      /* or */
-    PREC_LOGAND,     /* and */
-    PREC_COMP_EQUAL, /* > < >= <= */
-    PREC_ADDSUB,     /* + - */
-    PREC_MULDIV,     /* * / */
-    PREC_UNARY,      /* # ! */
-} OpPrecedence;
+    PRECEDENCE_ILLEGAL = -1, /* Whenever some thing desired happens */
+    PRECEDENCE_NORMAL = 0,   /* Lowest */
+    PRECEDENCE_OROP,         /* or */
+    PRECEDENCE_ANDOP,        /* and */
+    PRECEDENCE_RELOP,        /* > < >= <= */
+    PRECEDENCE_ADDSUB,       /* + - */
+    PRECEDENCE_MULDIV,       /* * / */
+    PRECEDENCE_UNARY,        /* # ! */
+} Precedence;
 
 /* Pratt Parser ExprNode function pointers to call based on infix and prefix
  * expression */
-typedef struct ExprNode *(*PrefixFn)(TokenStruct token,
-                                     OpPrecedence precedence);
+typedef struct ExprNode *(*PrefixFn)(TokenStruct token, Precedence precedence);
 typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenStruct token,
-                                    OpPrecedence precedence);
+                                    Precedence precedence);
+
+struct Parser
+{
+    Precedence precedence;
+};
 
 /* Helper Functions Forward Declaration */
 StatNodeList *parse_chunk();
@@ -50,23 +55,23 @@ void parse_while_stat(StatNode *stat, TokenStruct token);
 void parse_function_call_stat(StatNode *stat, TokenStruct token);
 
 /* Expr functions */
-ExprNode *parse_expr(OpPrecedence precedence);
+ExprNode *parse_expr(Precedence precedence);
 /* Parse Expression and use get_rule to tell which rult to apply */
 
 ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
-                            OpPrecedence precedence);
+                            Precedence precedence);
 /* a = a + b */
-ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_unary_expr(TokenStruct token, Precedence precedence);
 /* a = -10 */
-ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_constant_expr(TokenStruct token, Precedence precedence);
 /* a = 10 or a = nil or a = "10" or a = true */
-ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_identifier_expr(TokenStruct token, Precedence precedence);
 /* a = b */
 ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
-                                   OpPrecedence precedence);
+                                   Precedence precedence);
 /* a = beta() */
 
-ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
+ExprNode *parse_grouping_expr(TokenStruct token, Precedence precedence);
 /* (a + b) + c */
 
 /* Parse Rules for Pratt expresssion parsing */
@@ -74,36 +79,37 @@ typedef struct
 {
     PrefixFn prefix;
     InfixFn infix;
-    OpPrecedence precedence;
+    Precedence precedence;
 } ParseRule;
 
 ParseRule rules[] = {
     /* [TokenType] = {PrefixFn, InfixFn, precedence}, */
 
     /* Literal and Grouping Rules */
-    [LITERAL_NUMBER] = {parse_constant_expr, NULL, PREC_NIL},
-    [LITERAL_STRING] = {parse_constant_expr, NULL, PREC_NIL},
-    [IDENTIFIER] = {parse_constant_expr, NULL, PREC_NIL},
-    [NIL] = {parse_constant_expr, NULL, PREC_NIL},
-    [TRUE] = {parse_constant_expr, NULL, PREC_NIL},
-    [FALSE] = {parse_constant_expr, NULL, PREC_NIL},
+    [LITERAL_NUMBER] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
+    [LITERAL_STRING] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
+    [IDENTIFIER] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
+    [NIL] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
+    [TRUE] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
+    [FALSE] = {parse_constant_expr, NULL, PRECEDENCE_NORMAL},
 
     /* Arithmetic Rules */
-    [ADD] = {NULL, parse_binary_expr, PREC_ADDSUB},
-    [SUB] = {NULL, parse_binary_expr, PREC_ADDSUB},
-    [MUL] = {NULL, parse_binary_expr, PREC_MULDIV},
-    [DIV] = {NULL, parse_binary_expr, PREC_MULDIV},
+    [ADD] = {NULL, parse_binary_expr, PRECEDENCE_ADDSUB},
+    [SUB] = {NULL, parse_binary_expr, PRECEDENCE_ADDSUB},
+    [MUL] = {NULL, parse_binary_expr, PRECEDENCE_MULDIV},
+    [DIV] = {NULL, parse_binary_expr, PRECEDENCE_MULDIV},
 
     /* Comparision Rules */
-    [EQUAL_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [NOT_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [LESS_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [LESS_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [GREATER_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    [EQUAL_EQUAL] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
+    [NOT_EQUAL] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
+    [LESS_T_EQUAL] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
+    [LESS_T] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
+    [GREATER_T_EQUAL] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
+    [GREATER_T] = {NULL, parse_binary_expr, PRECEDENCE_RELOP},
 
     /* Misc */
-    [LPAREN] = {parse_grouping_expr, parse_function_call_expr, PREC_NIL},
+    [LPAREN] = {parse_grouping_expr, parse_function_call_expr,
+                PRECEDENCE_NORMAL},
 };
 
 ParseRule *get_rule(TokenType type)
@@ -322,7 +328,7 @@ void parse_function_call_stat(StatNode *stat, TokenStruct token)
     }
 }
 
-ExprNode *parse_expr(OpPrecedence precedence)
+ExprNode *parse_expr(Precedence precedence)
 {
     /**
      *
@@ -352,7 +358,7 @@ ExprNode *parse_expr(OpPrecedence precedence)
     return left_expr;
 }
 
-ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
+ExprNode *parse_constant_expr(TokenStruct token, Precedence precedence)
 {
     ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
     switch (token.type) {
@@ -393,9 +399,9 @@ ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
     return expr;
 }
 
-ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence)
+ExprNode *parse_grouping_expr(TokenStruct token, Precedence precedence)
 {
-    ExprNode *expr = parse_expr(PREC_NIL);
+    ExprNode *expr = parse_expr(PRECEDENCE_NORMAL);
     token = consume_token();
     if (token.type != RPAREN) {
         E(fprintf(stderr,
@@ -408,7 +414,7 @@ ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence)
 }
 
 ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
-                            OpPrecedence precedence)
+                            Precedence precedence)
 {
     ExprNode *expr = malloc(sizeof(ExprNode));
     expr->type = BinaryExpr;
@@ -419,7 +425,7 @@ ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
 }
 
 ExprNode *parse_function_call_expr(ExprNode *identifier, TokenStruct token,
-                                   OpPrecedence precedence)
+                                   Precedence precedence)
 {
     consume_token();
     if (token.type == LPAREN) {

@@ -25,54 +25,111 @@ typedef struct ExprNode *(*PrefixFn)(TokenStruct token, Precedence precedence);
 typedef struct ExprNode *(*InfixFn)(ExprNode *left, TokenStruct token,
                                     Precedence precedence);
 
+/* Types of Statements Available */
+typedef struct AssignmentStatement AssignmentStatement;
+typedef struct BlockStatement BlockStatement;
+typedef struct CallExpression CallExpression;
+typedef struct ExpressionList ExpressionList;
+typedef struct ExpressionListStatement ExpressionListStatement;
+typedef struct ExpressionStatement ExpressionStatement;
+typedef struct ForRangeStatement ForRangeStatement;
+typedef struct ForStatement ForStatement;
+typedef struct IfStatement IfStatement;
+typedef struct LocalVariableDeclareStatment LocalVariableDeclareStatment;
+typedef struct NameObject NameObject;
+typedef struct PackAssignmentListStatement PackAssignmentListStatement;
+typedef struct ReturnStatement ReturnStatement;
+typedef struct Variable Variable;
+typedef struct VariableDeclareListStatement VariableDeclareListStatement;
+typedef struct VariableDeclareStatement VariableDeclareStatement;
+
+typedef struct Expression Expression;
+typedef struct Block Block;
+
+/* NOTE: There might be extra types out there but these are the types that will
+ * remain until the IR
+ *
+ * Some types such asw GOTO and LABEL are there just for loops and if statements
+ * inorder to jump to different statements
+ * */
+typedef enum {
+    STATEMENT_ERROR,
+    STATEMENT_VARIABLE_DECLARE,
+    STATEMENT_ASSIGNMENT,
+    STATEMENT_EXPRESSION,
+    STATEMENT_BLOCK,
+    STATEMENT_RETURN,
+    STATEMENT_BREAK_OR_CONTINUE,
+    STATEMENT_GOTO,
+    STATEMENT_LABEL,
+    STATEMENT_IF,
+} StatementType;
+
+typedef struct
+{
+    StatementType *statement_type;
+    union
+    {
+        /* When all the structs are defined then we are going to sort these out inorder */
+        AssignmentStatement *assignment_statement;
+        BlockStatement *block_statement;
+        CallExpression *call_expression;
+        Expression *expression;
+        ExpressionList *expression_list;
+        ExpressionListStatement *expression_list_statement;
+        ExpressionStatement *expression_statement;
+        ForRangeStatement *for_range_statement;
+        ForStatement *for_statement;
+        IfStatement *if_statement;
+        LocalVariableDeclareStatment *local_variable_declare_statement;
+        PackAssignmentListStatement *pack_assignment_list_statement;
+        ReturnStatement *return_statement;
+        Variable *variable;
+        VariableDeclareListStatement *variable_declare_list_statement;
+        VariableDeclareStatement *variable_declare_statement;
+    };
+} Statement;
+
 struct Parser
 {
+    Location *location;
+    const char *SymTableKey;
+    /* To store or find itself inside the SymTable */
+    Statement* statement;
     Precedence precedence;
 };
 
-/* Helper Functions Forward Declaration */
-StatNodeList *parse_chunk();
+struct Location
+{
+    const char *filename;
+    size_t linenumber;
+};
 
-/* Statment functions */
+/* Function Declaration of statements parsers  */
+Statement* parser_make_variable_declaration(Parser *parser);
+Statement* parser_make_statement(Parser* parser, Expression* expression);
+AssignmentStatement* parser_make_assignment(Parser *parser, Expression* expression, Location* location);
+BlockStatement* parser_make_block_statement(Parser* parser, Block* block, Location* location);
+ReturnStatement* parser_make_return_statement(Parser* parser, NameObject* function, ExpressionList* expression_list, Location* location);
+
+
 StatNode *parse_stat();
+ExprNode *parse_expr(Precedence precedence);
+
 void parse_assignment_stat(StatNode *stat, TokenStruct token);
-/* a = 10 */
 void parse_if_else_stat(StatNode *stat, TokenStruct token);
-/* if a == 1 then
- *     a = 2
- *  elseif a == 2 then
- *     a = 1
- *  else
- *     a = 0
- *  end
- */
 void parse_while_stat(StatNode *stat, TokenStruct token);
-/* a = 1
- * while a < 10 do
- *     a = a + 1
- * end
- */
 void parse_function_call_stat(StatNode *stat, TokenStruct token);
 
-/* Expr functions */
-ExprNode *parse_expr(Precedence precedence);
-/* Parse Expression and use get_rule to tell which rult to apply */
+ExprNode *parse_unary_expr(TokenStruct token, Precedence precedence);
+ExprNode *parse_constant_expr(TokenStruct token, Precedence precedence);
+ExprNode *parse_identifier_expr(TokenStruct token, Precedence precedence);
+ExprNode *parse_grouping_expr(TokenStruct token, Precedence precedence);
 
 ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
                             Precedence precedence);
-/* a = a + b */
-ExprNode *parse_unary_expr(TokenStruct token, Precedence precedence);
-/* a = -10 */
-ExprNode *parse_constant_expr(TokenStruct token, Precedence precedence);
-/* a = 10 or a = nil or a = "10" or a = true */
-ExprNode *parse_identifier_expr(TokenStruct token, Precedence precedence);
-/* a = b */
 ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
                                    Precedence precedence);
-/* a = beta() */
-
-ExprNode *parse_grouping_expr(TokenStruct token, Precedence precedence);
-/* (a + b) + c */
 
 /* Parse Rules for Pratt expresssion parsing */
 typedef struct

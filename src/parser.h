@@ -5,6 +5,8 @@
 #include <stdbool.h>
 
 typedef struct Parser Parser;
+typedef struct Location Location;
+typedef enum {} PNodeType;
 
 /* Forward Declarations */
 typedef struct StatNodeList StatNodeList; /* Chunk or Block */

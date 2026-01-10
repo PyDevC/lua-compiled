@@ -43,8 +43,11 @@ hmap *map_create()
 void map_destroy(hmap *maplist)
 {
     size_t i;
-    for (i = 0; i < maplist->length; i++) {
-        free((void *)maplist->entries[i].key);
+    for (i = 0; i < maplist->capacity; i++) {
+        if (maplist->entries[i].key != NULL &&
+            (strcmp(maplist->entries[i].key, TOMBSTONE) == 0)) {
+            free((void *)maplist->entries[i].key);
+        }
     }
     free(maplist->entries);
     free(maplist);
@@ -97,7 +100,7 @@ void *map_get_value(hmap *maplist, const char *key)
     size_t index = (size_t)(fibo_hash_key(hash) & (maplist->capacity - 1));
 
     while (maplist->entries[index].key != NULL) {
-        if ((strcmp(maplist->entries[index].key, TOMBSTONE) == 0) &&
+        if ((strcmp(maplist->entries[index].key, TOMBSTONE) != 0) &&
             (strcmp(key, maplist->entries[index].key) == 0)) {
             return maplist->entries[index].data;
         }

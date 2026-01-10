@@ -3,6 +3,7 @@
 
 #include "errors.h"
 #include "lexer.h"
+#include "symboltable.h"
 #include "parser.h"
 #include <stdio.h>
 
@@ -21,8 +22,8 @@ int main(int argc, char **argv)
     } else if (argc == 2) {
         char *filename = argv[1];
         init_lexer(filename);
+        G_STable_create(); /* Initialize the Global Symbol Table */
         StatNodeList *chunk = parse_chunk();
-        printf("%p\n", chunk);
 
 /* ADDED Just to debug will be removed in future */
 #ifdef DEBUG_LUA

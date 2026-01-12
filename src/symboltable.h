@@ -7,13 +7,13 @@ typedef struct SymTable SymTable;
 typedef struct Symbol Symbol;
 
 typedef enum {
+    S_NIL,
     S_INT,
     S_FLOAT,
     S_STRING,
     S_BOOLEAN,
     S_FUNCTION,
     S_VARIABLE,
-    S_NIL,
 } SymType;
 
 struct SymTable

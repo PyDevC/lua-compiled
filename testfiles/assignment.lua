@@ -1,6 +1,7 @@
 a = 10
 a = 0
-b = 10
+b = true
+d = true
 a = a + 1
 c = a + b
 

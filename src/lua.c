@@ -4,6 +4,7 @@
 #include "errors.h"
 #include "lexer.h"
 #include "parser.h"
+#include "resolve.h"
 #include "symboltable.h"
 #include <stdio.h>
 
@@ -24,13 +25,13 @@ int main(int argc, char **argv)
         init_lexer(filename);
         G_STable_create(); /* Initialize the Global Symbol Table */
         StatNodeList *chunk = parse_chunk();
-        printf("%p\n", chunk);
-
+        D(fprintf(stdout, "DEBUG: Starting Type Resolution\n"));
 /* ADDED Just to debug will be removed in future */
 #ifdef DEBUG_LUA
         traverse_stat_node_list(chunk);
 #endif
 
+        resolve_node_stat_list(chunk, G_SymTable);
         return 0;
     }
 }

@@ -2,6 +2,7 @@
 #define ERRORS_H
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #if defined(DEBUG_LUA)
 #define D(x) x
@@ -9,7 +10,11 @@
 #define D(x)
 #endif
 
-#define E(x) x
+#define E(x)                                                                   \
+    do {                                                                       \
+        x;                                                                     \
+        exit(0);                                                               \
+    } while (0)
 #define MAX_TRACE_STACK_DEPTH 200
 
 typedef enum {

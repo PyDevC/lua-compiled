@@ -289,7 +289,7 @@ void parse_function_call_stat(StatNode *stat, TokenStruct token)
     stat->data.functioncall.func = malloc(sizeof(FunctionDefNode));
     stat->data.functioncall.func->funcname = malloc(sizeof(VarNode));
     stat->data.functioncall.func->funcname->name = token.literal;
-    stat->type = FunctionCAllStat;
+    stat->type = FunctionCallStat;
     consume_token(); /* Consume LPAREN */
     token = peek_next_token();
     if (token.type == RPAREN) {
@@ -458,7 +458,7 @@ void traverse_stat_node(StatNode *stat)
         traverse_expr(stat->data.while_stat.condition);
         traverse_stat_node_list(stat->data.while_stat.while_block);
 
-    } else if (stat->type == FunctionCAllStat) {
+    } else if (stat->type == FunctionCallStat) {
         traverse_functioncall_node(stat->data.functioncall.func);
 
     } else {

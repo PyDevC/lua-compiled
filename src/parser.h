@@ -75,6 +75,8 @@ struct ExprNode
 struct VarNode
 {
     char *name;
+    bool is_global;
+    int stack_offset;
 };
 
 struct VarNodeList
@@ -85,7 +87,7 @@ struct VarNodeList
 
 struct StatNode
 {
-    enum { AssignmentStat, IfElseStat, WhileLoopStat, FunctionCAllStat } type;
+    enum { AssignmentStat, IfElseStat, WhileLoopStat, FunctionCallStat } type;
     union
     {
         struct

@@ -1,6 +1,8 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
+#include "map.h"
+
 typedef struct SymTable SymTable;
 typedef struct Symbol Symbol;
 
@@ -8,14 +10,29 @@ typedef enum {
     S_INT,
     S_FLOAT,
     S_STRING,
+    S_BOOLEAN,
     S_FUNCTION,
+    S_VARIABLE,
     S_NIL,
 } SymType;
+
+struct SymTable
+{
+    hmap *symmap;
+    struct SymTable *outer;
+};
+
+struct Symbol
+{
+    SymType type;
+    void *symbol;
+};
 
 SymTable *STable_create(SymTable *outer);
 void STable_destroy(SymTable *table);
 const char *STable_set_entry(SymTable *STable, const char *key, Symbol *Sym);
 Symbol *STable_get_value(SymTable *STable, const char *key);
+Symbol *Sym_create(SymType type, void *symbol);
 
 /* Global Symbol Table */
 

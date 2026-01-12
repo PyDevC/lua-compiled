@@ -1,5 +1,4 @@
 #include "symboltable.h"
-#include "map.h"
 
 #include <stdlib.h>
 
@@ -7,12 +6,6 @@
  * Contain the Abstraction over map.h to and provides some features of symbol
  * table
  **/
-
-struct SymTable
-{
-    hmap *symmap;
-    struct SymTable *outer;
-};
 
 SymTable *G_SymTable = NULL;
 
@@ -62,14 +55,7 @@ void G_STable_create() { G_SymTable = STable_create(NULL); }
 
 /* Symbol Creations */
 
-struct Symbol
-{
-    SymType type;
-    bool is_constant;
-    int scope;
-};
-
-Symbol *Sym_create(SymType type, bool is_constant, int scope)
+Symbol *Sym_create(SymType type, void *symbol)
 {
     Symbol *Sym = malloc(sizeof(Symbol));
     if (Sym == NULL) {
@@ -77,8 +63,7 @@ Symbol *Sym_create(SymType type, bool is_constant, int scope)
     }
 
     Sym->type = type;
-    Sym->is_constant = is_constant;
-    Sym->scope = scope;
+    Sym->symbol = symbol;
 
     return Sym;
 }

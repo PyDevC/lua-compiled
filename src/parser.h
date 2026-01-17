@@ -53,14 +53,14 @@ struct ExprNode
 
         struct
         {
-            TokenType op;
+            TokenStruct op;
             ExprNode *left;
             ExprNode *right;
         } binary_expr;
 
         struct
         {
-            TokenType op;
+            TokenStruct op;
             ExprNode *right;
         } unary_expr;
 

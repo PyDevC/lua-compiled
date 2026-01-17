@@ -26,12 +26,26 @@ int main(int argc, char **argv)
         G_STable_create(); /* Initialize the Global Symbol Table */
         StatNodeList *chunk = parse_chunk();
         D(fprintf(stdout, "DEBUG: Starting Type Resolution\n"));
+        SymTable *global_table = STable_create(NULL);
+        IRStream *ir_stream = IRStream_create();
 /* ADDED Just to debug will be removed in future */
 #ifdef DEBUG_LUA
         traverse_stat_node_list(chunk);
 #endif
 
         resolve_node_stat_list(chunk, G_SymTable);
+        StatNodeList *curr = chunk;
+        while (curr != NULL) {
+            if (curr->stat->type == AssignmentStat) {
+                generate_expr_ir(curr->stat->data.assingment_stat.expr,
+                                 global_table, ir_stream);
+            }
+            curr = curr->next;
+        }
+
+        // 4. Final Output
+        generate_assembly(ir_stream);
+
         return 0;
     }
 }

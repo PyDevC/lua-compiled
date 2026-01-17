@@ -388,7 +388,7 @@ ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
     ExprNode *expr = malloc(sizeof(ExprNode));
     expr->type = BinaryExpr;
     expr->data.binary_expr.left = left;
-    expr->data.binary_expr.op = *token.literal;
+    expr->data.binary_expr.op = token;
     expr->data.binary_expr.right = parse_expr(precedence);
     return expr;
 }
@@ -493,7 +493,8 @@ void traverse_expr(ExprNode *expr)
         if (expr->type == BinaryExpr) {
             printf("data.binary_expr->left->");
             traverse_expr(expr->data.binary_expr.left);
-            printf("data.binary_expr.op = '%c'\n", expr->data.binary_expr.op);
+            printf("data.binary_expr.op = '%s'\n",
+                   expr->data.binary_expr.op.literal);
             printf("data.binary_expr->right->");
             traverse_expr(expr->data.binary_expr.right);
         }

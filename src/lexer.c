@@ -17,13 +17,48 @@ static short has_peeked = 0;
 
 FILE *f = NULL;
 
-/* Buffer window to store blocks of source code */
-char buffer[TOTALREADBUFFER_SIZE + 1];
-char *lexeme_begin; /* Gets updated after previous token is captured */
-char *forward;      /* Gets update with every character */
-int linenumber;     /*Keeping this global for now but there might be better way
-                          to do this*/
-int colnumber;      /*Same for this*/
+/**
+ * MainBuffer
+ *
+ * This struct consists of a buffer and two indexs which acts as a window for
+ * locating token_buffer inside of main_buffer. Size of buffer is
+ * READBUFFER_SIZE.
+ *
+ * If the buffer consists of NULL character then it is said to be end of stream.
+ * We can use NULL character check to determine whether to further lookahead or
+ * not.
+ * When end == READBUFFER_SIZE we need to fill up the buffer, then set start
+ * to 0 and end to 0 as new buffer is obtained.
+ **/
+static struct MainBuffer
+{
+    char buffer[READBUFFER_SIZE]; /* Content of buffer */
+    int start; /* index of the location where the token_buffer starts */
+    int end;   /* index of the location where the token_buffer ends */
+} main_buffer;
+
+/**
+ * TokenBuffer
+ *
+ * This struct is a smaller version of MainBuffer but with lineno and colno.
+ * Functions can only access token_buffer. There is no direct mainipulation of
+ * MainBuffer.
+ *
+ * This is a cyclic kind of buffer start and end represent the start and end of
+ * stream local to token_buffer. This buffer is checked for NULL character, if
+ * it consists of NULL then it means we have EOF
+ **/
+static struct TokenBuffer
+{
+    char buffer[TOKENBUFFER_SIZE]; /* Buffer where the lexer looks for token */
+    long int lineno; /* Current line number which you are parsing */
+    int start;       /* start of token buffer */
+    int end;         /* end of a token buffer */
+    short colno;     /* Current column number you are parsing */
+} token_buffer;
+
+static int lexeme_begin; /* Gets updated after previous token is captured */
+static int forward;      /* Gets update with every character */
 
 /* Keywords with their token name, tokens defines in lexer.h */
 static const KeywordEntry keywords[] = {
@@ -37,11 +72,10 @@ static const KeywordEntry keywords[] = {
     {ILLEGAL, NULL}};
 
 /* Function Declarations */
-int fill_buffer(int bufno);
-
 char get_next_char();
 char peek_next_char();
 void skip_whitespaces();
+void skip_comments();
 
 TokenStruct make_token(TokenType type);
 TokenType read_keyword(const char *identifier_literal);
@@ -53,65 +87,91 @@ TokenStruct get_next_token();
 
 /* Function Definitions */
 
-int fill_buffer(int bufno)
+/* Operations on MainBuffer */
+void main_buffer_fill_buffer()
 {
-    int idx = bufno * READBUFFER_SIZE;
-    size_t read_counter = fread(&buffer[idx], 1, READBUFFER_SIZE, f);
+    size_t read_counter = fread(&main_buffer.buffer, 1, READBUFFER_SIZE, f);
 
-    buffer[idx + (int)read_counter] = '\0';
+    /* Checking EOF */
+    if (read_counter != READBUFFER_SIZE) {
+        if (feof(f)) {
+            main_buffer.buffer[(int)read_counter] = '\0'; /* End of Stream */
+        } else if (ferror(f)) {
+            E(fprintf(stderr, "Error while reading file\n"));
+        }
+    }
+}
 
-    return (read_counter > 0);
+void main_buffer_init()
+{
+    main_buffer.start = 0;
+    main_buffer.end = 0;
+    main_buffer_fill_buffer();
+}
+
+/* Operations on TokenBuffer */
+void token_buffer_fill_buffer()
+{
+    while (1) {
+        char c = main_buffer.buffer[main_buffer.end];
+        if (c == '\0') {
+            token_buffer.buffer[token_buffer.end] = '\0';
+            break;
+        }
+
+        int next_token_end = (token_buffer.end + 1) % TOKENBUFFER_SIZE;
+        if (next_token_end == token_buffer.start) {
+            break;
+        }
+
+        token_buffer.buffer[token_buffer.end] = c;
+
+        main_buffer.end++;
+        if (main_buffer.end == READBUFFER_SIZE) {
+            main_buffer.end = 0;
+            main_buffer_fill_buffer();
+        }
+
+        token_buffer.end++;
+        if (token_buffer.end == TOKENBUFFER_SIZE) {
+            token_buffer.end = 0;
+        }
+    }
+}
+
+void token_buffer_init()
+{
+    token_buffer.colno = 0;
+    token_buffer.lineno = 1;
+    token_buffer.start = 0;
+
+    main_buffer.start = 0;
+    main_buffer.end = token_buffer.end;
+
+    token_buffer_fill_buffer();
 }
 
 char get_next_char()
 {
-    char c = *forward;
-
+    char c = token_buffer.buffer[forward];
     if (c == '\0') {
-        /* Here bufno shows what part of buffer we are at */
-        int bufno = (forward >= &buffer[TOTALREADBUFFER_SIZE]) ? 1 : 0;
-        if (bufno == 0) {
-            forward = &buffer[READBUFFER_SIZE];
-        } else {
-            forward = &buffer[0];
-        }
-        int success = fill_buffer(1 - bufno);
-        if (!success) {
-            return EOF;
-        }
-        c = *forward;
+        return EOF;
     }
     forward++;
-    colnumber++;
-    if (c == '\n') {
-        linenumber++;
-        colnumber = 0;
+    if (forward == TOKENBUFFER_SIZE) {
+        /* If the forward reaches the end redirect it to the begining */
+        forward = 0;
     }
-
     return c;
 }
 
-char peek_next_char()
-{
-    char c = *forward;
-    if (c == '\0') {
-        c = get_next_char();
-        return c;
-    }
-    return *forward;
-}
+char peek_next_char() { return token_buffer.buffer[forward]; }
 
 void skip_whitespaces()
 {
-    char c = get_next_char();
-    if (c == EOF) {
-        *forward = EOF;
-        return;
+    while (is_blank(peek_next_char())) {
+        get_next_char();
     }
-    while (is_blank(c)) {
-        c = get_next_char();
-    }
-    forward--;
 }
 
 void skip_comments()
@@ -146,14 +206,34 @@ TokenStruct make_token(TokenType type)
         return (TokenStruct){.type = type};
     }
 
-    long int length = forward - lexeme_begin;
-    char *literal = (char *)malloc((size_t)length);
-    strncpy(literal, lexeme_begin, (size_t)length);
-    literal[length] = '\0';
-    lexeme_begin = forward;
+    size_t length = 0;
+    if (lexeme_begin > forward) {
+        /* lexeme_begin in front of forward */
+        length = (size_t)(forward + (TOKENBUFFER_SIZE - lexeme_begin));
+    } else if (lexeme_begin == forward) {
+        length = (size_t)(1);
+    } else {
+        length = (size_t)(forward - lexeme_begin + 1);
+    }
+
+    char *literal = malloc(length + 1);
+    int i = 0;
+    while (lexeme_begin != forward) {
+        literal[i] = token_buffer.buffer[lexeme_begin];
+        lexeme_begin++;
+        if (lexeme_begin == READBUFFER_SIZE) {
+            lexeme_begin = 0;
+        }
+        i++;
+    }
+    literal[i] = '\0';
 
     D(fprintf(stdout, "DEBUG: src/lexer.c/make_token: literal -> '%s'\n",
               literal));
+
+    /* refill token_buffer */
+    token_buffer.start = forward;
+    token_buffer_fill_buffer();
 
     return (TokenStruct){.type = type, .literal = literal};
 }
@@ -174,7 +254,7 @@ TokenStruct read_identifier()
 
         D(fprintf(stdout,
                   "DEBUG: src/lexer.c/read_identifier: forward-> '%c'\n",
-                  *forward));
+                  token_buffer.buffer[forward]));
 
         get_next_char();
     }
@@ -182,7 +262,7 @@ TokenStruct read_identifier()
     D(fprintf(stdout,
               "DEBUG: src/lexer.c/read_identifier: lexeme_begin-> '%c', "
               "forward-> '%c'\n",
-              *lexeme_begin, *forward));
+              token_buffer.buffer[lexeme_begin], token_buffer.buffer[forward]));
 
     TokenStruct token = make_token(IDENTIFIER);
     token.type = read_keyword(token.literal);
@@ -297,8 +377,8 @@ TokenStruct get_next_token()
 {
     TokenStruct token = {0}; /* First time the TokenType should be illegal */
     skip_whitespaces();
-    skip_comments();
-    skip_whitespaces();
+    // skip_comments();
+    // skip_whitespaces();
     lexeme_begin = forward; /* Marking Start of Token */
 
     char c = get_next_char();
@@ -347,11 +427,9 @@ int init_lexer(const char *filename)
     if (!f) {
         return 1;
     }
-    lexeme_begin = buffer;
-    forward = buffer;
-    linenumber = 1;
-    colnumber = 0;
-    fill_buffer(0);
-    fill_buffer(1);
+    main_buffer_init();
+    token_buffer_init();
+    lexeme_begin = 0;
+    forward = 0;
     return 0;
 }

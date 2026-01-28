@@ -1,10 +1,8 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#define READBUFFER_SIZE                                                        \
-    819200 /* Keeping Buffer size to 100KB due to bugs in twin buffer of lexer \
-            */
-#define TOTALREADBUFFER_SIZE 2 * READBUFFER_SIZE
+#define READBUFFER_SIZE 1024 /* Size of MainBuffer 1KB */
+#define TOKENBUFFER_SIZE 16  /* Size of TokenBuffer 2B */
 
 #include <stdio.h>
 
@@ -67,7 +65,7 @@ typedef enum {
     IDENTIFIER,
 } TokenType;
 
-typedef struct TokenStruct
+typedef struct
 {
     TokenType type;
     char *literal;

@@ -25,6 +25,7 @@ int main(int argc, char **argv)
         init_lexer(filename);
         G_STable_create(); /* Initialize the Global Symbol Table */
         StatNodeList *chunk = parse_chunk();
+        return 0;
         D(fprintf(stdout, "DEBUG: Starting Type Resolution\n"));
         SymTable *global_table = STable_create(NULL);
         IRStream *ir_stream = IRStream_create();

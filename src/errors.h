@@ -13,7 +13,7 @@
 #define E(x)                                                                   \
     do {                                                                       \
         x;                                                                     \
-        exit(0);                                                               \
+        exit(1);                                                               \
     } while (0)
 #define MAX_TRACE_STACK_DEPTH 200
 

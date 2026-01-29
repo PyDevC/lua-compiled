@@ -203,35 +203,32 @@ void skip_comments()
 TokenStruct make_token(TokenType type)
 {
     if (type == _EOF) {
-        return (TokenStruct){.type = type};
+        return (TokenStruct){.type = type, .literal = NULL};
     }
 
-    size_t length = 0;
-    if (lexeme_begin > forward) {
-        /* lexeme_begin in front of forward */
-        length = (size_t)(forward + (TOKENBUFFER_SIZE - lexeme_begin));
-    } else if (lexeme_begin == forward) {
-        length = (size_t)(1);
+    size_t length;
+    if (forward >= lexeme_begin) {
+        length = (size_t)(forward - lexeme_begin);
     } else {
-        length = (size_t)(forward - lexeme_begin + 1);
+        length = (size_t)(TOKENBUFFER_SIZE - lexeme_begin + forward);
     }
 
     char *literal = malloc(length + 1);
-    int i = 0;
-    while (lexeme_begin != forward) {
-        literal[i] = token_buffer.buffer[lexeme_begin];
-        lexeme_begin++;
-        if (lexeme_begin == READBUFFER_SIZE) {
-            lexeme_begin = 0;
-        }
-        i++;
+    if (!literal) {
+        E(fprintf(stderr, "Out of memory\n"));
+        exit(1);
     }
-    literal[i] = '\0';
 
+    int temp_begin = lexeme_begin;
+    for (size_t i = 0; i < length; i++) {
+        literal[i] = token_buffer.buffer[temp_begin];
+        temp_begin = (temp_begin + 1) % TOKENBUFFER_SIZE;
+    }
+    literal[length] = '\0';
     D(fprintf(stdout, "DEBUG: src/lexer.c/make_token: literal -> '%s'\n",
               literal));
 
-    /* refill token_buffer */
+    lexeme_begin = forward;
     token_buffer.start = forward;
     token_buffer_fill_buffer();
 
@@ -377,8 +374,8 @@ TokenStruct get_next_token()
 {
     TokenStruct token = {0}; /* First time the TokenType should be illegal */
     skip_whitespaces();
-    // skip_comments();
-    // skip_whitespaces();
+    skip_comments();
+    skip_whitespaces();
     lexeme_begin = forward; /* Marking Start of Token */
 
     char c = get_next_char();

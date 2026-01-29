@@ -374,8 +374,8 @@ TokenStruct get_next_token()
 {
     TokenStruct token = {0}; /* First time the TokenType should be illegal */
     skip_whitespaces();
-    skip_comments();
-    skip_whitespaces();
+    // skip_comments();
+    // skip_whitespaces();
     lexeme_begin = forward; /* Marking Start of Token */
 
     char c = get_next_char();

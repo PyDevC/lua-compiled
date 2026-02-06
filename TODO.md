@@ -1,7 +1,5 @@
 # TODO
 
-- fix lexer double buffering 
-
-## Lexer
-
-Double buffering in lexer [https://stackoverflow.com/questions/70321679/understanding-double-buffering-in-lexical-analyzer]
+- [ ] Write a tree walker with some function pointers to execute functions while walking the nodes of tree.
+- [ ] Add type evaluation pass for AST.
+- [ ] Add constant folding pass for AST.

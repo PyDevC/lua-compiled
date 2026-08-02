@@ -13,7 +13,7 @@ DEBUG=-g -DDEBUG_LUA=1
 
 .PHONY: all build test debug fmt
 
-all: fmt build test
+all: build test
 
 build:
 	mkdir -p build

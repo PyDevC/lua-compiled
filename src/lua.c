@@ -6,21 +6,15 @@
 #include "parser.h"
 #include "resolve.h"
 #include "symboltable.h"
-#include <stdio.h>
-
-void usage()
-{
-    /* Display usage of the compiler with the options available */
-    printf("lua [flags] [filename]\n");
-    printf("ex: lua hello.lua\n");
-}
+#include "cmdline.h"
 
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        usage();
+        print_cmdline_usage();
         return 1;
     } else if (argc == 2) {
+        setup_cmdline_args(argc, argv);
         char *filename = argv[1];
         init_lexer(filename);
         G_STable_create(); /* Initialize the Global Symbol Table */

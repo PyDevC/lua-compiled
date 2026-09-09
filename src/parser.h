@@ -141,6 +141,6 @@ typedef struct
 
 StatNodeList *parse_chunk(); /* This is the main node that should be exposed */
 void traverse_stat_node_list(StatNodeList *chunk);
-void init_parser(char* filename);
+void init_parser(char *filename);
 
 #endif // PARSER_H

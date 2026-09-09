@@ -14,6 +14,9 @@ typedef struct
 
 extern Param_T params;
 
+// Get output_bin_name
+Param_T get_params();
+
 // Display Flags in correct format
 void cmd_args_display_flag(char *flagname, char *description);
 

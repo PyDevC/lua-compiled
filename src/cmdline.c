@@ -15,6 +15,8 @@ void setup_define_flags()
     }
 }
 
+Param_T get_params() { return params; }
+
 void cmd_args_display_flag(char *flagname, char *description)
 {
     fprintf(stdout, "  %s \t%s\n", flagname, description);

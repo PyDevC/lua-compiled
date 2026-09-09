@@ -86,6 +86,12 @@ ParseRule *get_rule(TokenType type)
     return &rules[type];
 } /* returns either PrefixFn or InfixFn or NULL */
 
+void init_parser(char *filename)
+{
+    init_lexer(filename);
+    G_STable_create(); /* Initialize the Global Symbol Table */
+}
+
 StatNodeList *create_empty_chunk()
 {
     StatNodeList *chunk = malloc(sizeof(StatNodeList));

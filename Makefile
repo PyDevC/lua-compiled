@@ -1,5 +1,3 @@
-# Main development file for building and testing lua compiled
-
 WARN_LIMIT=20
 CC_WARNING=-fmax-errors=$(WARN_LIMIT) \
 		   -Werror \
@@ -10,25 +8,18 @@ CC_WARNING=-fmax-errors=$(WARN_LIMIT) \
 CC=gcc
 flags=-Wall
 DEBUG=-g -DDEBUG_LUA=1
+BUILD_PATH=build
 
 .PHONY: all build test debug fmt
 
 all: build test
+	mkdir -p build
 
 build:
-	mkdir -p build
-	$(CC) $(CC_WARNING) $(flags) src/*.c -o build/lua
+	$(CC) $(CC_WARNING) $(flags) src/*.c -O3 -o $(BUILD_PATH)/lua
 
 debug: 
-	mkdir -p build
-	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o build/lua
+	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o $(BUILD_PATH)/lua
 
 fmt:
 	clang-format --style=file -i src/*
-
-test: 
-	build/lua ./testfiles/assignment.lua
-	build/lua ./testfiles/controlflow.lua
-	build/lua ./testfiles/expressions.lua
-	build/lua ./testfiles/loops.lua
-	build/lua ./testfiles/function.lua

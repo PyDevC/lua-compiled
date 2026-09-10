@@ -3,8 +3,7 @@
 
 #include "lexer.h"
 #include <stdbool.h>
-
-typedef struct location_t location_t;
+#include <stddef.h>
 
 typedef enum {
     PREC_NIL,        /* Lowest */

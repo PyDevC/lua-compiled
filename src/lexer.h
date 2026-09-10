@@ -5,6 +5,7 @@
 #define TOKENBUFFER_SIZE 16  /* Size of TokenBuffer 2B */
 
 #include <stdio.h>
+#include <stddef.h>
 
 extern FILE *f;
 

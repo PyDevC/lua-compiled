@@ -26,8 +26,8 @@ void init_trace_stack(TraceStack *tracestack, char *filename)
     tracestack->level = 0;
 }
 
-CallBack *generate_callback(error_type error, char *filename,
-                            long long linenumber, int colnumber)
+CallBack *generate_callback(error_type error, char *filename, size_t linenumber,
+                            int colnumber)
 {
     CallBack *first = malloc(sizeof(CallBack));
     first->linenumber = linenumber;

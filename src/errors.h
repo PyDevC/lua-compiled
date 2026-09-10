@@ -1,6 +1,7 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -28,7 +29,7 @@ typedef struct
 {
     error_type error;
     char *filename;
-    long long linenumber;
+    size_t linenumber;
     int colnumber;
 } CallBack;
 
@@ -44,8 +45,8 @@ typedef struct
 void init_trace_stack(TraceStack *tracestack, char *filename);
 void trace_stack_insert(TraceStack *tracestack);
 CallBack trace_stack_pop(TraceStack *tracestack);
-CallBack *generate_callback(error_type error, char *filename,
-                            long long linenumber, int colnumber);
+CallBack *generate_callback(error_type error, char *filename, size_t linenumber,
+                            int colnumber);
 int stdout_tracestack();
 void terminate();
 /* If any panic error occurs then terminate the process of

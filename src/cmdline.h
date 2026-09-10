@@ -1,21 +1,23 @@
-#pragma once
+#ifndef LUA_CMDLINE_H
+#define LUA_CMDLINE_H
 
 #include <stdbool.h>
 
 typedef enum { CMDLINE, LUAFILE, MODULE } RunMode;
 
-typedef struct
+typedef struct LuaCmdlineParam LuaCmdlineParam;
+extern LuaCmdlineParam params;
+
+struct LuaCmdlineParam
 {
     char *filename;
     char *output_bin_name;
     bool debug;
     RunMode mode;
-} Param_T;
-
-extern Param_T params;
+};
 
 // Get output_bin_name
-Param_T get_params();
+LuaCmdlineParam get_params();
 
 // Display Flags in correct format
 void cmd_args_display_flag(char *flagname, char *description);
@@ -24,7 +26,9 @@ void cmd_args_display_flag(char *flagname, char *description);
 void cmd_args_display_msg(char *message);
 
 // setup defines and params for cli args
-void setup_cmdline_args(int argv, char *argc[]);
+void setup_cmdline_args(int argc, char *argv[]);
 
 // Main display function
 void print_cmdline_usage();
+
+#endif // LUA_CMDLINE_H

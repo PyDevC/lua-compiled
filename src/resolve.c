@@ -33,7 +33,7 @@ void resolve_node_var(VarNode *variable, SymTable *STable)
 {
     Symbol *sym = STable_get_value(STable, variable->name);
     if (sym == NULL) {
-        sym = Sym_create(S_NIL, (void *)variable);
+        sym = Sym_create(S_NIL, VAR_NODE, (void *)variable);
         D(fprintf(stdout, "DEBUG: Set Variable: %s as NIL\n", variable->name));
         STable_set_entry(STable, variable->name, sym);
     } else {

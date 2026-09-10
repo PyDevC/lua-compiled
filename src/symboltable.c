@@ -55,7 +55,7 @@ void G_STable_create() { G_SymTable = STable_create(NULL); }
 
 /* Symbol Creations */
 
-Symbol *Sym_create(SymType type, void *symbol)
+Symbol *Sym_create(SymType type, SymCategory category, void *symbol)
 {
     Symbol *Sym = malloc(sizeof(Symbol));
     if (Sym == NULL) {
@@ -63,6 +63,7 @@ Symbol *Sym_create(SymType type, void *symbol)
     }
 
     Sym->type = type;
+    Sym->category = category;
     Sym->symbol = symbol;
 
     return Sym;

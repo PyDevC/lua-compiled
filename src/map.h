@@ -1,17 +1,15 @@
 #ifndef MAP_H
 #define MAP_H
+
 #include <limits.h>
-
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
-
-/**
- **/
 
 #define MAP_CAPACITY_INIT 117148193
 #define FIBO_HASH_PRIME 11400714819323198485LLU
 #define FIBO_OFFSET 0xcbf29ce484222325LLU
-#define FIBO_OFFSET_MINI 11;
+#define FIBO_OFFSET_MINI 11
 
 typedef struct hmap hmap;
 

@@ -5,9 +5,11 @@
 
 static int temp_vaiable_count = 0;
 
+// Generate a new temp variable name.
+// t_n format
 char *new_temp()
 {
-    char *buf = malloc(10);
+    char *buf = (char *)malloc(12 * sizeof(char));
     sprintf(buf, "t%d", temp_vaiable_count++);
     return buf;
 }

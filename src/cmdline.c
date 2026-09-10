@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-Param_T params;
+LuaCmdlineParam params;
 
 void setup_define_flags()
 {
@@ -15,7 +15,7 @@ void setup_define_flags()
     }
 }
 
-Param_T get_params() { return params; }
+LuaCmdlineParam get_params() { return params; }
 
 void cmd_args_display_flag(char *flagname, char *description)
 {
@@ -34,11 +34,11 @@ void print_cmdline_usage()
     fflush(stdout);
 }
 
-void setup_cmdline_args(int argv, char *argc[])
+void setup_cmdline_args(int argc, char *argv[])
 {
     int arg = 0;
-    for (; arg < argv; arg++) {
-        char *param = argc[arg];
+    for (; arg < argc; arg++) {
+        char *param = argv[arg];
         // is a flag?
         if (param[0] == '-') {
             if (param[2] != '\0') {
@@ -54,7 +54,7 @@ void setup_cmdline_args(int argv, char *argc[])
                     exit(0);
                 } break;
                 case 'o': {
-                    params.output_bin_name = argc[arg++];
+                    params.output_bin_name = argv[++arg];
                 } break;
                 case 'g': {
                     params.debug = true;
@@ -65,7 +65,7 @@ void setup_cmdline_args(int argv, char *argc[])
                 };
             }
         } else {
-            params.filename = argc[arg];
+            params.filename = argv[arg];
             params.mode = LUAFILE;
         }
     }

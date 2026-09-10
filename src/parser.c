@@ -7,14 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Helper Functions Forward Declaration */
-StatNodeList *parse_chunk();
-
 /* Statment functions */
-StatNode *parse_stat();
-void parse_assignment_stat(StatNode *stat, TokenStruct token);
+static StatNode *parse_stat();
+static void parse_assignment_stat(StatNode *stat, TokenStruct token);
 /* a = 10 */
-void parse_if_else_stat(StatNode *stat, TokenStruct token);
+static void parse_if_else_stat(StatNode *stat, TokenStruct token);
 /* if a == 1 then
  *     a = 2
  *  elseif a == 2 then
@@ -23,36 +20,42 @@ void parse_if_else_stat(StatNode *stat, TokenStruct token);
  *     a = 0
  *  end
  */
-void parse_while_stat(StatNode *stat, TokenStruct token);
+static void parse_while_stat(StatNode *stat, TokenStruct token);
 /* a = 1
  * while a < 10 do
  *     a = a + 1
  * end
  */
-void parse_function_call_stat(StatNode *stat, TokenStruct token);
+static void parse_function_call_stat(StatNode *stat, TokenStruct token);
 
 /* Expr functions */
-ExprNode *parse_expr(OpPrecedence precedence);
+static ExprNode *parse_expr(OpPrecedence precedence);
 /* Parse Expression and use get_rule to tell which rult to apply */
 
-ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
-                            OpPrecedence precedence);
-/* a = a + b */
-ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence precedence);
-/* a = -10 */
-ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence);
-/* a = 10 or a = nil or a = "10" or a = true */
-ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence precedence);
-/* a = b */
-ExprNode *parse_function_call_expr(ExprNode *identifer, TokenStruct token,
+static ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
                                    OpPrecedence precedence);
+/* a = a + b */
+// static ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence
+// precedence);
+/* a = -10 */
+static ExprNode *parse_constant_expr(TokenStruct token,
+                                     OpPrecedence precedence);
+/* a = 10 or a = nil or a = "10" or a = true */
+// static ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence
+// precedence);
+
+/* a = b */
+static ExprNode *parse_function_call_expr(ExprNode *identifer,
+                                          TokenStruct token,
+                                          OpPrecedence precedence);
 /* a = beta() */
 
-ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence);
+static ExprNode *parse_grouping_expr(TokenStruct token,
+                                     OpPrecedence precedence);
 /* (a + b) + c */
 
 /* Parsing Rules */
-ParseRule rules[] = {
+const ParseRule rules[] = {
     /* Literal and Grouping Rules */
     /* [TokenType] = {PrefixFn, InfixFn, precedence}, */
 
@@ -81,7 +84,7 @@ ParseRule rules[] = {
     [LPAREN] = {parse_grouping_expr, parse_function_call_expr, PREC_NIL},
 };
 
-ParseRule *get_rule(TokenType type)
+const ParseRule *get_rule(TokenType type)
 {
     return &rules[type];
 } /* returns either PrefixFn or InfixFn or NULL */
@@ -92,7 +95,7 @@ void init_parser(char *filename)
     G_STable_create(); /* Initialize the Global Symbol Table */
 }
 
-StatNodeList *create_empty_chunk()
+static StatNodeList *create_empty_chunk()
 {
     StatNodeList *chunk = malloc(sizeof(StatNodeList));
     if (chunk == NULL) {

@@ -16,6 +16,11 @@ typedef enum {
     S_VARIABLE,
 } SymType;
 
+typedef enum {
+    VAR_NODE,
+    FUNCTION_CALL,
+} SymCategory;
+
 struct SymTable
 {
     hmap *symmap;
@@ -25,6 +30,7 @@ struct SymTable
 struct Symbol
 {
     SymType type;
+    SymCategory category;
     void *symbol;
 };
 
@@ -32,7 +38,7 @@ SymTable *STable_create(SymTable *outer);
 void STable_destroy(SymTable *table);
 const char *STable_set_entry(SymTable *STable, const char *key, Symbol *Sym);
 Symbol *STable_get_value(SymTable *STable, const char *key);
-Symbol *Sym_create(SymType type, void *symbol);
+Symbol *Sym_create(SymType type, SymCategory category, void *symbol);
 
 /* Global Symbol Table */
 

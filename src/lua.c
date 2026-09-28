@@ -15,10 +15,10 @@ int main(int argc, char **argv)
         // Setup
         setup_cmdline_args(argc, argv);
         LuaCmdlineParam params = get_params();
-        init_parser(params.filename);
+        LexerState *lex_state = init_parser(params.filename);
 
         // parsing
-        StatNodeList *lua_ast = parse_chunk();
+        StatNodeList *lua_ast = parse_chunk(lex_state);
 
 /* ADDED Just to debug will be removed in future */
 #ifdef DEBUG_LUA

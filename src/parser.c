@@ -1,6 +1,6 @@
 #include "parser.h"
 
-#define is_block_end(x) (x == TK_END) || (x == TK_ELSE) || (x == TK_EOF)
+#define is_block_end(x) ((x == TK_END) || (x == TK_ELSE) || (x == TK_EOF))
 
 static ASTIndex alloc_expr(Parser *parser, Expr node)
 {
@@ -158,7 +158,7 @@ ASTIndex parse_block(Parser *parser)
 {
     ASTIndex first = ASTNone;
     ASTIndex last = ASTNone;
-    while (!is_block_end(parser->current.tok_type)) {
+    while (!is_block_end(parser->previous.tok_type)) {
         ASTIndex stmt = parse_statement(parser);
         if (stmt == ASTNone) continue;
         if (first == ASTNone) {
@@ -190,8 +190,7 @@ Parser *init_parser(const char *name)
     parser->stmt_pool = NULL;
     parser->stmt_len = 0;
     parser->stmt_capacity = 0;
-    parser->current = lconsume(parser->lex_state);
-    printf("%d\n", parser->current.tok_type);
+    parser->current = lpeek_next(parser->lex_state);
     p_advance(parser);
     return parser;
 }

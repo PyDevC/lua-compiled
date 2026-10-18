@@ -342,7 +342,7 @@ Token lconsume(LexerState *lex_state)
         lex_state->lookahead.tok_type = TK_EMPTY;
         lex_state->lookahead.info.str = NULL;
     } else {
-        lex_state->tok = lex_state->lookahead;
+        lex_state->tok = lnext_token(lex_state);
     }
     return lex_state->tok;
 }

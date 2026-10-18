@@ -55,6 +55,7 @@ void arena_clear(Arena *arena)
     if (arena->current) {
         arena_clear_region(arena->current);
     }
+    arena->current = arena->first;
 }
 
 void arena_destroy(Arena *arena)

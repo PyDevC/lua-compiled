@@ -1,35 +1,23 @@
 #define CLUA_VERSION 0.0.1
 #define CODENAME LUA_PR
 
-#include "errors.h"
-#include "lexer.h"
-#include "symboltable.h"
+#include "cmdline.h"
 #include "parser.h"
-#include <stdio.h>
 
-void usage()
-{
-    /* Display usage of the compiler with the options available */
-    printf("lua [flags] [filename]\n");
-    printf("ex: lua hello.lua\n");
-}
+#include <stdio.h>
 
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        usage();
+        print_cmdline_usage();
         return 1;
     } else if (argc == 2) {
-        char *filename = argv[1];
-        init_lexer(filename);
-        G_STable_create(); /* Initialize the Global Symbol Table */
-        StatNodeList *chunk = parse_chunk();
-
-/* ADDED Just to debug will be removed in future */
-#ifdef DEBUG_LUA
-        traverse_stat_node_list(chunk);
-#endif
-
+        setup_cmdline_args(argc, argv);
+        LuaCmdlineParam params = get_params();
+        Parser *parser = init_parser(params.filename);
+        ASTIndex root_chunk_idx = parse_block(parser);
+        Statement *root_chunk = get_statement(parser, root_chunk_idx);
+        printf("%d\n", root_chunk->type);
         return 0;
     }
 }

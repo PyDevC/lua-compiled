@@ -1,7 +1,8 @@
-#ifndef ERRORS_H
-#define ERRORS_H
+#pragma once
 
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #if defined(DEBUG_LUA)
 #define D(x) x
@@ -9,7 +10,11 @@
 #define D(x)
 #endif
 
-#define E(x) x
+#define E(x)                                                                   \
+    do {                                                                       \
+        x;                                                                     \
+        exit(1);                                                               \
+    } while (0)
 #define MAX_TRACE_STACK_DEPTH 200
 
 typedef enum {
@@ -23,7 +28,7 @@ typedef struct
 {
     error_type error;
     char *filename;
-    long long linenumber;
+    size_t linenumber;
     int colnumber;
 } CallBack;
 
@@ -39,13 +44,11 @@ typedef struct
 void init_trace_stack(TraceStack *tracestack, char *filename);
 void trace_stack_insert(TraceStack *tracestack);
 CallBack trace_stack_pop(TraceStack *tracestack);
-CallBack *generate_callback(error_type error, char *filename,
-                            long long linenumber, int colnumber);
+CallBack *generate_callback(error_type error, char *filename, size_t linenumber,
+                            int colnumber);
 int stdout_tracestack();
 void terminate();
 /* If any panic error occurs then terminate the process of
                      compilation */
 
 extern TraceStack global_tracestack;
-
-#endif // ERRORS_H

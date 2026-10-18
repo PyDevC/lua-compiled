@@ -5,6 +5,7 @@ I was facinated by languages so I made one (using the same language I use for wr
 Hope I develop a better language.
 
 **Under Development**
+I will only write the compiler in c till the expression evaluation since writing it in c is a lot tedious task.
 
 ## Installation Dependencies
 

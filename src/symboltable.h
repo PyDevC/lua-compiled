@@ -1,5 +1,4 @@
-#ifndef SYMBOL_TABLE_H
-#define SYMBOL_TABLE_H
+#pragma once
 
 #include "map.h"
 
@@ -45,5 +44,3 @@ Symbol *Sym_create(SymType type, SymCategory category, void *symbol);
 extern SymTable *G_SymTable;
 
 void G_STable_create();
-
-#endif // SYMBOL_TABLE_H

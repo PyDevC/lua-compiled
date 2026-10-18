@@ -63,11 +63,9 @@ void arena_destroy(Arena *arena)
     if (!arena) return;
     ArenaRegion *walk_region = arena->first;
     while ((walk_region != NULL) && walk_region != arena->current) {
-        arena_destroy_region(walk_region);
+        ArenaRegion *curr_region = walk_region;
         walk_region = walk_region->next_chunk;
-    }
-    if (arena->current) {
-        arena_destroy_region(arena->current);
+        arena_destroy_region(curr_region);
     }
     free(arena);
 }

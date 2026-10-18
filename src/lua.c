@@ -2,9 +2,9 @@
 #define CODENAME LUA_PR
 
 #include "cmdline.h"
-#include "codegen.h"
 #include "parser.h"
-#include "resolve.h"
+
+#include <stdio.h>
 
 int main(int argc, char **argv)
 {
@@ -12,24 +12,12 @@ int main(int argc, char **argv)
         print_cmdline_usage();
         return 1;
     } else if (argc == 2) {
-        // Setup
         setup_cmdline_args(argc, argv);
         LuaCmdlineParam params = get_params();
-        LexerState *lex_state = init_parser(params.filename);
-
-        // parsing
-        StatNodeList *lua_ast = parse_chunk(lex_state);
-
-/* ADDED Just to debug will be removed in future */
-#ifdef DEBUG_LUA
-        traverse_stat_node_list(lua_ast);
-#endif
-
-        // semantics check
-        resolve_node_stat_list(lua_ast, G_SymTable);
-        // TODO: emitIR as ir stream
-        // generate_assembly(ir_stream);
-
+        Parser *parser = init_parser(params.filename);
+        ASTIndex root_chunk_idx = parse_block(parser);
+        Statement *root_chunk = get_statement(parser, root_chunk_idx);
+        printf("%d\n", root_chunk->type);
         return 0;
     }
 }

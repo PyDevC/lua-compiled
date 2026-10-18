@@ -1,5 +1,4 @@
-#ifndef LEXER_H
-#define LEXER_H
+#pragma once
 
 #include <stddef.h>
 #include <stdio.h>
@@ -122,8 +121,13 @@ typedef struct LexerState
 
 LexerState *init_lexer(const char *filename);
 
+/*
+ * Return the lex_state->tok, and consume the lookahead if not consumed
+ */
 Token lconsume(LexerState *lex_state);
+
+/*
+ * Return the lookahead token and move forward in buffer
+ */
 Token lpeek_next(LexerState *lex_state);
 const char *token_to_string(Token token);
-
-#endif // LEXER_H

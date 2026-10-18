@@ -1,525 +1,205 @@
 #include "parser.h"
-#include "errors.h"
-#include "lexer.h"
-#include "symboltable.h"
 
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
+#define is_block_end(x) (x == TK_END) || (x == TK_ELSE) || (x == TK_EOF)
 
-/* Statment functions */
-static StatNode *parse_stat();
-static void parse_assignment_stat(StatNode *stat, TokenStruct token);
-/* a = 10 */
-static void parse_if_else_stat(StatNode *stat, TokenStruct token);
-/* if a == 1 then
- *     a = 2
- *  elseif a == 2 then
- *     a = 1
- *  else
- *     a = 0
- *  end
- */
-static void parse_while_stat(StatNode *stat, TokenStruct token);
-/* a = 1
- * while a < 10 do
- *     a = a + 1
- * end
- */
-static void parse_function_call_stat(StatNode *stat, TokenStruct token);
+static ASTIndex alloc_expr(Parser *parser, Expr node)
+{
+    if (parser->expr_len >= parser->expr_capacity) {
+        parser->expr_capacity =
+            parser->expr_capacity == 0 ? 256 : 2 * parser->expr_capacity;
+        parser->expr_pool =
+            realloc(parser->expr_pool, parser->expr_capacity * sizeof(Expr));
+    }
+    parser->expr_pool[parser->expr_len] = node;
+    return parser->expr_len++;
+}
 
-/* Expr functions */
-static ExprNode *parse_expr(OpPrecedence precedence);
-/* Parse Expression and use get_rule to tell which rult to apply */
+static ASTIndex alloc_stmt(Parser *parser, Statement stmt)
+{
+    if (parser->stmt_len >= parser->stmt_capacity) {
+        parser->stmt_capacity =
+            parser->stmt_capacity == 0 ? 256 : 2 * parser->stmt_capacity;
+        parser->stmt_pool = realloc(parser->stmt_pool,
+                                    parser->stmt_capacity * sizeof(Statement));
+    }
+    parser->stmt_pool[parser->stmt_len] = stmt;
+    return parser->stmt_len++;
+}
 
-static ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
-                                   OpPrecedence precedence);
-/* a = a + b */
-// static ExprNode *parse_unary_expr(TokenStruct token, OpPrecedence
-// precedence);
-/* a = -10 */
-static ExprNode *parse_constant_expr(TokenStruct token,
-                                     OpPrecedence precedence);
-/* a = 10 or a = nil or a = "10" or a = true */
-// static ExprNode *parse_identifier_expr(TokenStruct token, OpPrecedence
-// precedence);
+void p_advance(Parser *parser)
+{
+    parser->previous = parser->current;
+    parser->current = lconsume(parser->lex_state);
+}
 
-/* a = b */
-static ExprNode *parse_function_call_expr(ExprNode *identifer,
-                                          TokenStruct token,
-                                          OpPrecedence precedence);
-/* a = beta() */
+int p_match(Parser *parser, ReservedToken tok_type)
+{
+    if (parser->current.tok_type == tok_type) {
+        p_advance(parser);
+        return 1;
+    }
+    return 0;
+}
 
-static ExprNode *parse_grouping_expr(TokenStruct token,
-                                     OpPrecedence precedence);
-/* (a + b) + c */
+typedef ASTIndex (*PrefixFn)(Parser *parser);
+typedef ASTIndex (*InfixFn)(Parser *parser, ASTIndex left);
 
-/* Parsing Rules */
-const ParseRule rules[] = {
-    /* Literal and Grouping Rules */
-    /* [TokenType] = {PrefixFn, InfixFn, precedence}, */
+typedef struct
+{
+    PrefixFn prefix;
+    InfixFn infix;
+    Precedence precedence;
+} ParserRule;
 
-    [LITERAL_NUMBER] = {parse_constant_expr, NULL, PREC_NIL},
-    [LITERAL_STRING] = {parse_constant_expr, NULL, PREC_NIL},
-    [IDENTIFIER] = {parse_constant_expr, NULL, PREC_NIL},
-    [NIL] = {parse_constant_expr, NULL, PREC_NIL},
-    [TRUE] = {parse_constant_expr, NULL, PREC_NIL},
-    [FALSE] = {parse_constant_expr, NULL, PREC_NIL},
+extern const ParserRule rules[];
 
-    /* Arithmetic Rules */
-    [ADD] = {NULL, parse_binary_expr, PREC_ADDSUB},
-    [SUB] = {NULL, parse_binary_expr, PREC_ADDSUB},
-    [MUL] = {NULL, parse_binary_expr, PREC_MULDIV},
-    [DIV] = {NULL, parse_binary_expr, PREC_MULDIV},
+ASTIndex parse_expression(Parser *parser, Precedence precedence)
+{
+    p_advance(parser);
+    PrefixFn prefix_rule = rules[parser->current.tok_type].prefix;
+    if (!prefix_rule) return ASTNone;
 
-    /* Comparision Rules */
-    [EQUAL_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [NOT_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [LESS_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [LESS_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [GREATER_T_EQUAL] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
-    [GREATER_T] = {NULL, parse_binary_expr, PREC_COMP_EQUAL},
+    ASTIndex left = prefix_rule(parser);
+    while (precedence <= rules[parser->current.tok_type].precedence) {
+        p_advance(parser);
+        InfixFn infix_rule = rules[parser->current.tok_type].infix;
+        left = infix_rule(parser, left);
+    }
+    return left;
+}
 
-    /* Misc */
-    [LPAREN] = {parse_grouping_expr, parse_function_call_expr, PREC_NIL},
+ASTIndex parse_primary(Parser *parser)
+{
+    if (parser->previous.tok_type == TK_NIL) {
+        return alloc_expr(parser, (Expr){.type = ExprNil, .as = {NULL}});
+    }
+    return ASTNone;
+}
+
+ASTIndex parse_binary(Parser *parser, ASTIndex left)
+{
+    ReservedToken op_type = parser->previous.tok_type;
+    Precedence precedence = rules[op_type].precedence;
+    ASTIndex right = parse_expression(parser, (Precedence)(precedence + 1));
+    return alloc_expr(parser, (Expr){.type = ExprBinary,
+                                     .as.binary.l_expr = left,
+                                     .as.binary.r_expr = right,
+                                     .as.binary.op = op_type});
+}
+
+const ParserRule rules[] = {
+    /* Constants  */
+    [TK_NIL] = {parse_primary, NULL, PREC_NONE},
+    [TK_NUMBER] = {parse_primary, NULL, PREC_NONE},
+    [TK_STRING] = {parse_primary, NULL, PREC_NONE},
+    [TK_NAME] = {parse_primary, NULL, PREC_NONE},
+    [TK_TRUE] = {parse_primary, NULL, PREC_NONE},
+    [TK_FALSE] = {parse_primary, NULL, PREC_NONE},
+
+    /* arithmetic expressions */
+    [TK_ADD] = {NULL, parse_binary, PREC_TERM},
+    [TK_SUB] = {NULL, parse_binary, PREC_TERM},
+    [TK_MUL] = {NULL, parse_binary, PREC_FACTOR},
+    [TK_DIV] = {NULL, parse_binary, PREC_FACTOR},
+
+    /* comparsion expressions */
+    [TK_EQ_EQ] = {NULL, parse_binary, PREC_COMPARE},
+    [TK_NEQ] = {NULL, parse_binary, PREC_COMPARE},
+    [TK_LT] = {NULL, parse_binary, PREC_COMPARE},
+    [TK_LT_EQ] = {NULL, parse_binary, PREC_COMPARE},
+    [TK_GT] = {NULL, parse_binary, PREC_COMPARE},
+    [TK_GT_EQ] = {NULL, parse_binary, PREC_COMPARE},
 };
 
-const ParseRule *get_rule(TokenType type)
+ASTIndex parse_assignment_statement(Parser *parser)
 {
-    return &rules[type];
-} /* returns either PrefixFn or InfixFn or NULL */
-
-void init_parser(char *filename)
-{
-    init_lexer(filename);
-    G_STable_create(); /* Initialize the Global Symbol Table */
-}
-
-static StatNodeList *create_empty_chunk()
-{
-    StatNodeList *chunk = malloc(sizeof(StatNodeList));
-    if (chunk == NULL) {
-        E(fprintf(stderr, "Fatal Error: Memory for chunk not allocated"));
-        exit(1);
+    p_advance(parser);
+    const char *name = parser->previous.info.str;
+    ASTIndex value = ASTNone;
+    if (p_match(parser, TK_EQ)) {
+        value = parse_expression(parser, PREC_ASSIGN);
     }
-    chunk->stat = NULL;
-    chunk->next = NULL;
-    return chunk;
+    return alloc_stmt(parser, (Statement){.type = StmtAssignment,
+                                          .as.assignment.name = name,
+                                          .as.assignment.value = value});
 }
 
-StatNodeList *parse_chunk()
+ASTIndex parse_local_statement(Parser *parser)
 {
-    StatNodeList *chunk = create_empty_chunk();
-    StatNodeList *temp = NULL;
-    TokenStruct token;
-
-    while (peek_next_token().type != _EOF) {
-        token = peek_next_token();
-        if (token.type == ILLEGAL) {
-            E(fprintf(stderr, "Syntax Error: %s is unexpected\n",
-                      peek_next_token().literal));
-            exit(1);
-        } else if (token.type == END || token.type == ELSEIF ||
-                   token.type == ELSE) {
-            break;
+    p_advance(parser);
+    if (p_match(parser, TK_NAME)) {
+        const char *name = parser->previous.info.str;
+        ASTIndex value = ASTNone;
+        if (p_match(parser, TK_EQ)) {
+            value = parse_expression(parser, PREC_ASSIGN);
         }
-
-        StatNode *stat = parse_stat();
-        if (stat != NULL) {
-            StatNodeList *new_node = create_empty_chunk();
-            new_node->stat = stat;
-            new_node->next = NULL;
-            if (chunk->stat == NULL) {
-                chunk = new_node;
-                temp = chunk;
-            } else {
-                temp->next = new_node;
-                temp = new_node;
-            }
-        }
+        return alloc_stmt(parser, (Statement){.type = StmtAssignment,
+                                              .as.local_var.name = name,
+                                              .as.local_var.value = value});
+    } else {
+        return ASTNone;
     }
-    return chunk;
 }
 
-StatNode *parse_stat()
+ASTIndex parse_statement(Parser *parser)
 {
-    /**
-     * parse_stat checks if the starting symbol of statment is Identifer or not.
-     *
-     * Case IDENTIFER:
-     *      Check if there is equal after it. If yes then parse as
-     *      assignment_stat.
-     * Case LOCAL:
-     *      Check if there is some local variable. if yes then evaluate it
-     *      same as IDENTIFER
-     *
-     * @return StatNode
-     **/
-    TokenStruct token = consume_token();
-    StatNode *stat = malloc(sizeof(StatNode));
-
-    switch (token.type) {
-    case IDENTIFIER: {
-        if (peek_next_token().type == EQUAL) {
-            parse_assignment_stat(stat, token);
-        } else if (peek_next_token().type == LPAREN) {
-            parse_function_call_stat(stat, token);
-        } else {
-            E(fprintf(stderr,
-                      "Syntax Error: Expected '=' or functioncall after "
-                      "Identifer '%s'\n",
-                      token.literal));
-            exit(1);
-        }
-    } break;
-    case LOCAL: {
-        if (peek_next_token().type == IDENTIFIER) {
-            token = consume_token(); /* IDENTIFIER */
-            if (peek_next_token().type == EQUAL) {
-                parse_assignment_stat(stat, token);
-            } else if (peek_next_token().type == LPAREN) {
-                parse_function_call_stat(stat, token);
-            } else {
-                E(fprintf(stderr,
-                          "Syntax Error: Expected '=' or functioncall after "
-                          "Identifer '%s'\n",
-                          token.literal));
-                exit(1);
-            }
-        }
-    } break;
-    case IF: {
-        parse_if_else_stat(stat, token);
-    } break;
-    case WHILE: {
-        parse_while_stat(stat, token);
-    } break;
+    switch (parser->previous.tok_type) {
+    case TK_NAME:
+        return parse_assignment_statement(parser);
+    case TK_LOCAL:
+        return parse_local_statement(parser);
     default:
-        E(fprintf(stderr, "Syntax Error: Statment should not start with %s\n",
-                  token.literal));
-        exit(1);
-    };
-    return stat;
-}
-
-void parse_assignment_stat(StatNode *stat, TokenStruct token)
-{
-    /**
-     * parse_assignment_stat assigns assingment_stat node to this StatNode.
-     * assingment_stat node as two children: VarNode and ExprNode.
-     **/
-    stat->data.assingment_stat.var = malloc(sizeof(VarNode));
-    stat->type = AssignmentStat;
-    stat->data.assingment_stat.var->name = token.literal;
-    consume_token(); /* consume equal */
-    stat->data.assingment_stat.expr = parse_expr(0.0);
-}
-
-void parse_if_else_stat(StatNode *stat, TokenStruct token)
-{
-    /**
-     * parse_if_else_stat check all the valid conditions in their respective
-     * functions, here we just structure the code in 'if else' construct
-     **/
-    stat->data.if_else_stat.if_branches = malloc(sizeof(IfBlockNode));
-    stat->data.if_else_stat.if_branches->condition = parse_expr(0.0);
-    stat->type = IfElseStat;
-    token = consume_token(); /* Consume then */
-    if (token.type == THEN) {
-        stat->data.if_else_stat.if_branches->block = parse_chunk();
-    } else {
-        E(fprintf(
-            stderr,
-            "Syntax Error: Expected 'then' after if statment but got '%s'\n",
-            token.literal));
-        exit(1);
-    }
-    token = consume_token(); /* Either elseif, else or end */
-    stat->data.if_else_stat.if_branches->next =
-        NULL; /* It is important to keep it NULL cause we can use NULL in
-                 traversal */
-    while (token.type == ELSEIF) {
-        IfBlockNode *elseif = malloc(sizeof(IfBlockNode));
-        elseif->condition = parse_expr(0.0);
-        token = consume_token(); /* Consume then */
-        if (token.type == THEN) {
-            elseif->block = parse_chunk();
-        } else {
-            E(fprintf(stderr,
-                      "Syntax Error: Expected 'then' after if statment but got "
-                      "'%s'\n",
-                      token.literal));
-            exit(1);
-        }
-        stat->data.if_else_stat.if_branches->next = elseif;
-        elseif->next = NULL;
-        token = consume_token(); /* Either elseif, else or end  */
-    }
-    if (token.type == ELSE) {
-        stat->data.if_else_stat.else_block = parse_chunk();
-        token = consume_token(); /* end */
-    }
-    if (token.type != END) {
-        E(fprintf(stderr,
-                  "Syntax Error: Expected 'end' but got "
-                  "'%s'\n",
-                  token.literal));
-        exit(1);
-    }
-}
-
-void parse_while_stat(StatNode *stat, TokenStruct token)
-{
-    stat->data.while_stat.condition = malloc(sizeof(ExprNode));
-    stat->data.while_stat.condition = parse_expr(0.0);
-    stat->type = WhileLoopStat;
-    token = consume_token(); /* Consume do */
-    if (token.type == DO) {
-        stat->data.while_stat.while_block = parse_chunk();
-    } else {
-        E(fprintf(stderr,
-                  "Syntax Error: Expected 'do' after expression but got "
-                  "'%s'\n",
-                  token.literal));
-        exit(1);
-    }
-    token = consume_token();
-    if (token.type != END) {
-        E(fprintf(stderr,
-                  "Syntax Error: Expected 'end' but got "
-                  "'%s'\n",
-                  token.literal));
-        exit(1);
-    }
-}
-
-void parse_function_call_stat(StatNode *stat, TokenStruct token)
-{
-    stat->data.functioncall.func = malloc(sizeof(FunctionDefNode));
-    stat->data.functioncall.func->funcname = malloc(sizeof(VarNode));
-    stat->data.functioncall.func->funcname->name = token.literal;
-    stat->type = FunctionCallStat;
-    consume_token(); /* Consume LPAREN */
-    token = peek_next_token();
-    if (token.type == RPAREN) {
-        consume_token(); /* Consume RPAREN */
-    }
-}
-
-ExprNode *parse_expr(OpPrecedence precedence)
-{
-    /**
-     *
-     **/
-    TokenStruct token = consume_token(); /* First Token After EQUAL */
-    PrefixFn prefix_rule = get_rule(token.type)->prefix;
-    if (prefix_rule == NULL) {
-        E(fprintf(stderr, "Syntax Error: No prefix rule for Token: '%s'\n",
-                  token.literal));
-        exit(1);
-    }
-
-    ExprNode *left_expr = prefix_rule(token, precedence);
-
-    while (precedence < get_rule(peek_next_token().type)->precedence) {
-        token = consume_token();
-        InfixFn infix_rule = get_rule(token.type)->infix;
-        if (infix_rule == NULL) {
-            E(fprintf(
-                stdout,
-                "No infix rule found, Note this could be a normal thing.\n"));
-            return left_expr;
-        }
-        left_expr =
-            infix_rule(left_expr, token, get_rule(token.type)->precedence);
-    }
-    return left_expr;
-}
-
-ExprNode *parse_constant_expr(TokenStruct token, OpPrecedence precedence)
-{
-    ExprNode *expr = (ExprNode *)malloc(sizeof(ExprNode));
-    switch (token.type) {
-    case LITERAL_STRING: {
-        expr->type = StringExpr;
-        expr->data.literalstring = token.literal;
-    } break;
-    case LITERAL_NUMBER: {
-        char *end_ptr;
-        expr->type = NumberExpr;
-        expr->data.literalnumber = strtod(token.literal, &end_ptr);
-    } break;
-    case IDENTIFIER: {
-        expr->data.var = malloc(sizeof(VarNode));
-        expr->type = VariableExpr;
-        expr->data.var->name = token.literal;
-    } break;
-    case NIL: {
-        expr->type = NilExpr;
-        expr->data.isnil = 1;
-    } break;
-    case TRUE: {
-        expr->type = BooleanExpr;
-        expr->data.boolean = 1;
-    } break;
-    case FALSE: {
-        expr->type = BooleanExpr;
-        expr->data.boolean = 0;
-    } break;
-    default:
-        E(fprintf(stderr,
-                  "Syntax Error: Expected a number, boolean, nil, identifer or "
-                  "string but got '%s' with precedence '%d'\n",
-                  token.literal, precedence));
-        exit(1);
-    }
-
-    return expr;
-}
-
-ExprNode *parse_grouping_expr(TokenStruct token, OpPrecedence precedence)
-{
-    ExprNode *expr = parse_expr(PREC_NIL);
-    token = consume_token();
-    if (token.type != RPAREN) {
-        E(fprintf(stderr,
-                  "Syntax Error: Expected ')' for '(' but got '%s', with "
-                  "precedence '%d'",
-                  token.literal, precedence));
-        exit(1);
-    }
-    return expr;
-}
-
-ExprNode *parse_binary_expr(ExprNode *left, TokenStruct token,
-                            OpPrecedence precedence)
-{
-    ExprNode *expr = malloc(sizeof(ExprNode));
-    expr->type = BinaryExpr;
-    expr->data.binary_expr.left = left;
-    expr->data.binary_expr.op = token;
-    expr->data.binary_expr.right = parse_expr(precedence);
-    return expr;
-}
-
-ExprNode *parse_function_call_expr(ExprNode *identifier, TokenStruct token,
-                                   OpPrecedence precedence)
-{
-    consume_token();
-    if (token.type == LPAREN) {
-        return NULL;
-    }
-    ExprNode *expr = malloc(sizeof(ExprNode));
-    expr->data.functioncall.funcname = malloc(sizeof(VarNode));
-    expr->type = FunctionCallExpr;
-    expr->data.functioncall.funcname->name = identifier->data.var->name;
-    token = consume_token(); /* Consume RPAREN */
-    if (token.type != RPAREN) {
-        E(fprintf(stderr,
-                  "Syntax Error: Expected ')' after '(' in a function call "
-                  "but got '%s' with precedence '%d'\n",
-                  token.literal, precedence));
-        exit(1);
-    }
-    return expr;
-}
-
-#ifdef DEBUG_LUA
-
-/* Traverse Tree */
-void traverse_stat_node_list(StatNodeList *chunk);
-void traverse_stat_node(StatNode *stat);
-void traverse_expr(ExprNode *expr);
-void traverse_if_else_stat(IfBlockNode *if_branches);
-void traverse_functioncall_node(FunctionDefNode *func);
-
-void traverse_stat_node_list(StatNodeList *chunk)
-{
-    StatNodeList *temp = chunk;
-    while (temp != NULL) {
-        if (temp->stat == NULL) {
-            D(fprintf(stdout, "temp->stat->NULL\n"));
-            break;
-        } else {
-            // Branch from where
-            traverse_stat_node(temp->stat);
-        }
-        temp = temp->next;
-    }
-}
-
-void traverse_stat_node(StatNode *stat)
-{
-    /* Check if any node is non-empty */
-    if (stat->type == AssignmentStat) {
-        printf("stat->data.assingment_stat.var->name->%s\n",
-               stat->data.assingment_stat.var->name);
-        printf("stat->data.assingment_stat.var->expr->");
-        assert(stat->data.assingment_stat.expr != NULL);
-        traverse_expr(stat->data.assingment_stat.expr);
-
-    } else if (stat->type == IfElseStat) {
-        traverse_if_else_stat(stat->data.if_else_stat.if_branches);
-        printf("stat->data.if_else_stat.else_block->\n");
-        traverse_stat_node_list(stat->data.if_else_stat.else_block);
-
-    } else if (stat->type == WhileLoopStat) {
-        traverse_expr(stat->data.while_stat.condition);
-        traverse_stat_node_list(stat->data.while_stat.while_block);
-
-    } else if (stat->type == FunctionCallStat) {
-        traverse_functioncall_node(stat->data.functioncall.func);
-
-    } else {
-        D(fprintf(stdout, "stat->NULL\n"));
-        return;
-    }
-}
-
-void traverse_expr(ExprNode *expr)
-{
-    switch (expr->type) {
-    case NumberExpr:
-        printf("data.literalnumber = '%F'\n", expr->data.literalnumber);
-        break;
-    case StringExpr:
-        printf("data.literalstring = '%s'\n", expr->data.literalstring);
-        break;
-    case BooleanExpr:
-        printf("data.boolean = '%d'\n", expr->data.boolean);
-        break;
-    case VariableExpr:
-        printf("data.var->name = '%s'\n", expr->data.var->name);
-        break;
-    case NilExpr:
-        printf("data.isnil = '%d'\n", expr->data.isnil);
-        break;
-    case FunctionCallExpr:
-        printf("data.functioncall.funcname->name = '%s'\n",
-               expr->data.functioncall.funcname->name);
-        break;
-    default: {
-        if (expr->type == BinaryExpr) {
-            printf("data.binary_expr->left->");
-            traverse_expr(expr->data.binary_expr.left);
-            printf("data.binary_expr.op = '%s'\n",
-                   expr->data.binary_expr.op.literal);
-            printf("data.binary_expr->right->");
-            traverse_expr(expr->data.binary_expr.right);
-        }
-    } break;
+        p_advance(parser);
+        return ASTNone;
     };
 }
 
-void traverse_functioncall_node(FunctionDefNode *func)
+ASTIndex parse_block(Parser *parser)
 {
-    printf("func->funcname->name = '%s'\n", func->funcname->name);
-    traverse_stat_node_list(func->body);
+    ASTIndex first = ASTNone;
+    ASTIndex last = ASTNone;
+    while (!is_block_end(parser->current.tok_type)) {
+        ASTIndex stmt = parse_statement(parser);
+        if (stmt == ASTNone) continue;
+        if (first == ASTNone) {
+            first = stmt;
+        } else {
+            parser->stmt_pool[last].next = stmt;
+        }
+        last = stmt;
+    }
+
+    return alloc_stmt(parser, (Statement){.type = StmtBlock,
+                                          .as.block.first_stmt = first,
+                                          .next = ASTNone});
 }
 
-void traverse_if_else_stat(IfBlockNode *if_branches)
+Statement *get_statement(Parser *parser, ASTIndex stmt)
 {
-    printf("%p\n", if_branches);
+    return &parser->stmt_pool[stmt];
 }
 
-#endif
+Parser *init_parser(const char *name)
+{
+    Parser *parser = malloc(sizeof(Parser));
+    if (!parser) return NULL;
+    parser->lex_state = init_lexer(name);
+    parser->expr_pool = NULL;
+    parser->expr_len = 0;
+    parser->expr_capacity = 0;
+    parser->stmt_pool = NULL;
+    parser->stmt_len = 0;
+    parser->stmt_capacity = 0;
+    parser->current = lconsume(parser->lex_state);
+    printf("%d\n", parser->current.tok_type);
+    p_advance(parser);
+    return parser;
+}
+
+void destroy_parser(Parser *parser)
+{
+    free(parser->expr_pool);
+    free(parser->stmt_pool);
+    free(parser->lex_state);
+    free(parser);
+}

@@ -1,5 +1,4 @@
-#ifndef ERRORS_H
-#define ERRORS_H
+#pragma once
 
 #include <stddef.h>
 #include <stdio.h>
@@ -53,5 +52,3 @@ void terminate();
                      compilation */
 
 extern TraceStack global_tracestack;
-
-#endif // ERRORS_H

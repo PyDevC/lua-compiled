@@ -1,5 +1,4 @@
-#ifndef MAP_H
-#define MAP_H
+#pragma once
 
 #include <limits.h>
 #include <stdbool.h>
@@ -35,5 +34,3 @@ bool hmap_itr_next(hmap_itr *iter);
 /* Fibonacci hashing function */
 size_t fibo_hash_key(size_t hash);
 size_t hash_key(const char *key);
-
-#endif // MAP_H

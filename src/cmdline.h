@@ -1,5 +1,4 @@
-#ifndef LUA_CMDLINE_H
-#define LUA_CMDLINE_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -30,5 +29,3 @@ void setup_cmdline_args(int argc, char *argv[]);
 
 // Main display function
 void print_cmdline_usage();
-
-#endif // LUA_CMDLINE_H

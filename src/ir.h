@@ -1,5 +1,4 @@
-#ifndef IR_H
-#define IR_H
+#pragma once
 
 typedef enum { OP_VAR, OP_CONST, OP_TEMP } OperandType;
 
@@ -23,5 +22,3 @@ typedef struct IRInstr
     IROperand src2;
     struct IRInstr *next; // Linked list for the instruction stream
 } IRInstr;
-
-#endif // IR_H

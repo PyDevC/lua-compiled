@@ -336,7 +336,6 @@ Token lpeek_next(LexerState *lex_state)
 Token lconsume(LexerState *lex_state)
 {
     lex_state->lastline = lex_state->linenumber;
-    free_token(&lex_state->tok);
     if(lex_state->lookahead.tok_type != TK_EMPTY) {
         lex_state->tok = lex_state->lookahead;
         lex_state->lookahead.tok_type = TK_EMPTY;

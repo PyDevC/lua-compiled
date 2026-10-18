@@ -6,7 +6,7 @@
 
 #define ASTIndex uint32_t
 #define u32 uint32_t
-#define ASTNone 0
+#define ASTNone ((uint32_t)-1)
 
 typedef enum ExprType {
     ExprNil,

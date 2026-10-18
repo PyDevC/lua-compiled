@@ -1,4 +1,5 @@
 #include "parser.h"
+#include <string.h>
 
 #define is_block_end(x) ((x == TK_END) || (x == TK_ELSE) || (x == TK_EOF))
 
@@ -7,8 +8,10 @@ static ASTIndex alloc_expr(Parser *parser, Expr node)
     if (parser->expr_len >= parser->expr_capacity) {
         parser->expr_capacity =
             parser->expr_capacity == 0 ? 256 : 2 * parser->expr_capacity;
-        parser->expr_pool =
+        Expr *new_pool =
             realloc(parser->expr_pool, parser->expr_capacity * sizeof(Expr));
+        if (!new_pool) return ASTNone;
+        parser->expr_pool = new_pool;
     }
     parser->expr_pool[parser->expr_len] = node;
     return parser->expr_len++;
@@ -19,9 +22,12 @@ static ASTIndex alloc_stmt(Parser *parser, Statement stmt)
     if (parser->stmt_len >= parser->stmt_capacity) {
         parser->stmt_capacity =
             parser->stmt_capacity == 0 ? 256 : 2 * parser->stmt_capacity;
-        parser->stmt_pool = realloc(parser->stmt_pool,
-                                    parser->stmt_capacity * sizeof(Statement));
+        Statement *new_pool = realloc(parser->stmt_pool, parser->stmt_capacity *
+                                                             sizeof(Statement));
+        if (!new_pool) return ASTNone;
+        parser->stmt_pool = new_pool;
     }
+    stmt.next = ASTNone;
     parser->stmt_pool[parser->stmt_len] = stmt;
     return parser->stmt_len++;
 }
@@ -55,25 +61,38 @@ extern const ParserRule rules[];
 
 ASTIndex parse_expression(Parser *parser, Precedence precedence)
 {
-    p_advance(parser);
     PrefixFn prefix_rule = rules[parser->current.tok_type].prefix;
     if (!prefix_rule) return ASTNone;
 
+    p_advance(parser);
     ASTIndex left = prefix_rule(parser);
     while (precedence <= rules[parser->current.tok_type].precedence) {
         p_advance(parser);
         InfixFn infix_rule = rules[parser->current.tok_type].infix;
         left = infix_rule(parser, left);
     }
+
     return left;
 }
 
 ASTIndex parse_primary(Parser *parser)
 {
-    if (parser->previous.tok_type == TK_NIL) {
+    switch (parser->previous.tok_type) {
+    case TK_NIL:
         return alloc_expr(parser, (Expr){.type = ExprNil, .as = {NULL}});
-    }
-    return ASTNone;
+    case TK_NUMBER:
+        return alloc_expr(parser,
+                          (Expr){.type = ExprNumber,
+                                 .as.number = parser->previous.info.number});
+    case TK_TRUE:
+        return alloc_expr(parser,
+                          (Expr){.type = ExprBoolean, .as.boolean = true});
+    case TK_FALSE:
+        return alloc_expr(parser,
+                          (Expr){.type = ExprBoolean, .as.boolean = false});
+    default:
+        return ASTNone;
+    };
 }
 
 ASTIndex parse_binary(Parser *parser, ASTIndex left)
@@ -113,7 +132,6 @@ const ParserRule rules[] = {
 
 ASTIndex parse_assignment_statement(Parser *parser)
 {
-    p_advance(parser);
     const char *name = parser->previous.info.str;
     ASTIndex value = ASTNone;
     if (p_match(parser, TK_EQ)) {
@@ -126,14 +144,13 @@ ASTIndex parse_assignment_statement(Parser *parser)
 
 ASTIndex parse_local_statement(Parser *parser)
 {
-    p_advance(parser);
     if (p_match(parser, TK_NAME)) {
         const char *name = parser->previous.info.str;
         ASTIndex value = ASTNone;
         if (p_match(parser, TK_EQ)) {
             value = parse_expression(parser, PREC_ASSIGN);
         }
-        return alloc_stmt(parser, (Statement){.type = StmtAssignment,
+        return alloc_stmt(parser, (Statement){.type = StmtLocalVar,
                                               .as.local_var.name = name,
                                               .as.local_var.value = value});
     } else {
@@ -179,18 +196,23 @@ Statement *get_statement(Parser *parser, ASTIndex stmt)
     return &parser->stmt_pool[stmt];
 }
 
+Expr *get_expression(Parser *parser, ASTIndex expr)
+{
+    return &parser->expr_pool[expr];
+}
+
 Parser *init_parser(const char *name)
 {
     Parser *parser = malloc(sizeof(Parser));
     if (!parser) return NULL;
     parser->lex_state = init_lexer(name);
-    parser->expr_pool = NULL;
-    parser->expr_len = 0;
+    parser->expr_pool = (Expr *)malloc(256);
+    parser->expr_len = 1;
     parser->expr_capacity = 0;
-    parser->stmt_pool = NULL;
-    parser->stmt_len = 0;
+    parser->stmt_pool = (Statement *)malloc(256);
+    parser->stmt_len = 1;
     parser->stmt_capacity = 0;
-    parser->current = lpeek_next(parser->lex_state);
+    parser->current = lconsume(parser->lex_state);
     p_advance(parser);
     return parser;
 }

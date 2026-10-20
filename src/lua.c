@@ -24,15 +24,12 @@ int main(int argc, char **argv)
             if (stmt != NULL && stmt->type == StmtAssignment) {
                 printf("%s = ", stmt->as.assignment.name);
                 Expr *value = get_expression(parser, stmt->as.assignment.value);
-                if (value != NULL && value->type == ExprNumber) {
-                    printf("%f\n", value->as.number);
-                } else {
-                    printf("<unknown>\n");
-                }
+                print_expression(parser, value);
             } else {
                 printf("statement is null\n");
                 break;
             }
+            printf("\n");
             stmt_idx = stmt->next;
         }
         return 0;

@@ -43,3 +43,5 @@ ASTIndex parse_block(Parser *parser);
 
 Statement *get_statement(Parser *parser, ASTIndex stmt);
 Expr *get_expression(Parser *parser, ASTIndex expr);
+
+void print_expression(Parser* parser, Expr *expr);

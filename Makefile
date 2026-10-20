@@ -13,13 +13,17 @@ BUILD_PATH=build
 .PHONY: all build test debug fmt
 
 all: build test
-	mkdir -p build
 
 build:
+	mkdir -p build
 	$(CC) $(CC_WARNING) $(flags) src/*.c -O3 -o $(BUILD_PATH)/lua
 
 debug: 
+	mkdir -p build
 	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o $(BUILD_PATH)/lua
 
 fmt:
 	clang-format --style=file -i src/*
+
+test:
+	$(BUILD_PATH)/lua testfiles/assignment.lua

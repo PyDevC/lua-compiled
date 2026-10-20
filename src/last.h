@@ -27,6 +27,7 @@ typedef struct Expr
         bool boolean;
         double number;
         const char *string;
+        const char* variable;
 
         struct
         {

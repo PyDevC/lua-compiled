@@ -67,16 +67,18 @@ ASTIndex parse_expression(Parser *parser, Precedence precedence)
     p_advance(parser);
     ASTIndex left = prefix_rule(parser);
     while (precedence <= rules[parser->current.tok_type].precedence) {
-        p_advance(parser);
         InfixFn infix_rule = rules[parser->current.tok_type].infix;
+        p_advance(parser);
         left = infix_rule(parser, left);
     }
+    p_advance(parser);
 
     return left;
 }
 
 ASTIndex parse_primary(Parser *parser)
 {
+    const char *variable;
     switch (parser->previous.tok_type) {
     case TK_NIL:
         return alloc_expr(parser, (Expr){.type = ExprNil, .as = {NULL}});
@@ -90,6 +92,10 @@ ASTIndex parse_primary(Parser *parser)
     case TK_FALSE:
         return alloc_expr(parser,
                           (Expr){.type = ExprBoolean, .as.boolean = false});
+    case TK_NAME:
+        variable = parser->previous.info.str;
+        return alloc_expr(
+            parser, (Expr){.type = ExprVariable, .as.variable = variable});
     default:
         return ASTNone;
     };
@@ -199,6 +205,41 @@ Statement *get_statement(Parser *parser, ASTIndex stmt)
 Expr *get_expression(Parser *parser, ASTIndex expr)
 {
     return &parser->expr_pool[expr];
+}
+
+void print_expression(Parser *parser, Expr *expr)
+{
+    switch (expr->type) {
+    case ExprNil: {
+        printf("nil ");
+    } break;
+    case ExprBoolean: {
+        printf("%b ", expr->as.boolean);
+    } break;
+    case ExprNumber: {
+        printf("%f ", expr->as.number);
+    } break;
+    case ExprString: {
+        printf("%s ", expr->as.string);
+    } break;
+    case ExprVariable: {
+        printf("%s ", expr->as.variable);
+    } break;
+    case ExprCall: {
+        printf("not implemented");
+    } break;
+    case ExprUnary: {
+        printf("%d", expr->as.unary.op);
+        print_expression(parser, get_expression(parser, expr->as.unary.l_expr));
+    } break;
+    case ExprBinary: {
+        print_expression(parser,
+                         get_expression(parser, expr->as.binary.l_expr));
+        printf("%d ", expr->as.binary.op);
+        print_expression(parser,
+                         get_expression(parser, expr->as.binary.r_expr));
+    } break;
+    };
 }
 
 Parser *init_parser(const char *name)

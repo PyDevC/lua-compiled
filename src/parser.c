@@ -199,6 +199,7 @@ ASTIndex parse_statement(Parser *parser)
     case TK_NAME:
         return parse_assignment_statement(parser);
     case TK_LOCAL:
+        p_advance(parser);
         return parse_local_statement(parser);
     default:
         p_advance(parser);

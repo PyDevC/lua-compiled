@@ -11,7 +11,8 @@ void walk_ast(Parser *parser, Statement *root)
     ASTIndex stmt_idx = root->as.block.first_stmt;
     while (stmt_idx != ASTNone) {
         Statement *stmt = get_statement(parser, stmt_idx);
-        if (stmt != NULL && stmt->type == StmtAssignment) {
+        if (stmt != NULL &&
+            (stmt->type == StmtAssignment || stmt->type == StmtLocalVar)) {
             printf("%s = ", stmt->as.assignment.name);
             Expr *value = get_expression(parser, stmt->as.assignment.value);
             if (value != NULL) {

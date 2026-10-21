@@ -5,3 +5,5 @@ d = "hello"
 e = nil
 f = e
 g = -10
+
+local a = 10

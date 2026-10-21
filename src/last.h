@@ -60,7 +60,7 @@ typedef enum {
     StmtAssignment,
     StmtIfElse,
     StmtWhile,
-    StmtDoWhile,
+    StmtRepeatUntil,
     StmtForLoop,
     StmtExpr,
 } StmtType;
@@ -101,5 +101,21 @@ typedef struct
             ASTIndex first_stmt;
             ASTIndex next_elif_or_else;
         } if_else_stmt;
+
+        struct
+        {
+            ASTIndex condition_expr;
+            ASTIndex first_stmt;
+            bool is_repat_until;
+        } while_or_repeat_stmt;
+
+        struct
+        {
+            const char *var;
+            ASTIndex start_expr;
+            ASTIndex end_expr;
+            ASTIndex step_expr;
+            ASTIndex first_stmt;
+        } for_stmt;
     } as;
 } Statement;

@@ -2,7 +2,8 @@
 #include <string.h>
 
 #define is_block_end(x)                                                        \
-    ((x == TK_END) || (x == TK_ELSE) || (x == TK_ELSEIF) || (x == TK_EOF))
+    ((x == TK_END) || (x == TK_ELSE) || (x == TK_ELSEIF) || (x == TK_UNTIL) || \
+     (x == TK_EOF))
 
 static ASTIndex alloc_expr(Parser *parser, Expr node)
 {
@@ -268,6 +269,80 @@ ASTIndex parse_if_statement(Parser *parser)
     return if_stmt_idx;
 }
 
+ASTIndex parse_while_loop_stmt(Parser *parser)
+{
+    p_advance(parser);
+    ASTIndex while_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex while_block = parse_block(parser);
+    if (!p_match(parser, TK_END)) {
+        // error
+    }
+
+    return alloc_stmt(
+        parser,
+        (Statement){.type = StmtWhile,
+                    .as.while_or_repeat_stmt.condition_expr = while_expr,
+                    .as.while_or_repeat_stmt.first_stmt = while_block,
+                    .as.while_or_repeat_stmt.is_repat_until = false});
+}
+
+ASTIndex parse_repeat_until_stmt(Parser *parser)
+{
+    p_advance(parser);
+    ASTIndex repeat_block = parse_block(parser);
+    if (!p_match(parser, TK_UNTIL)) {
+        // error
+    }
+    ASTIndex until_expr = parse_expression(parser, PREC_NONE);
+
+    return alloc_stmt(
+        parser,
+        (Statement){.type = StmtRepeatUntil,
+                    .as.while_or_repeat_stmt.condition_expr = until_expr,
+                    .as.while_or_repeat_stmt.first_stmt = repeat_block,
+                    .as.while_or_repeat_stmt.is_repat_until = true});
+}
+
+ASTIndex parse_for_loop_stmt(Parser *parser)
+{
+    p_advance(parser);
+    if (!p_match(parser, TK_NAME)) {
+        // error
+    }
+
+    const char *var = parser->previous.info.str;
+    if (!p_match(parser, TK_EQ)) {
+        // error
+    }
+
+    ASTIndex start_expr = parse_expression(parser, PREC_NONE);
+    if (!p_match(parser, TK_COMMA)) {
+        // error
+    }
+
+    ASTIndex end_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex step_expr = ASTNone;
+    if (p_match(parser, TK_COMMA)) {
+        step_expr = parse_expression(parser, PREC_NONE);
+    }
+
+    if (!p_match(parser, TK_DO)) {
+        // error
+    }
+
+    ASTIndex for_block = parse_block(parser);
+    if (!p_match(parser, TK_END)) {
+        // error
+    }
+
+    return alloc_stmt(parser, (Statement){.type = StmtForLoop,
+                                          .as.for_stmt.var = var,
+                                          .as.for_stmt.start_expr = start_expr,
+                                          .as.for_stmt.end_expr = end_expr,
+                                          .as.for_stmt.step_expr = step_expr,
+                                          .as.for_stmt.first_stmt = for_block});
+}
+
 ASTIndex parse_statement(Parser *parser)
 {
     switch (parser->current.tok_type) {
@@ -278,6 +353,12 @@ ASTIndex parse_statement(Parser *parser)
         return parse_local_statement(parser);
     case TK_IF:
         return parse_if_statement(parser);
+    case TK_WHILE:
+        return parse_while_loop_stmt(parser);
+    case TK_REPEAT:
+        return parse_repeat_until_stmt(parser);
+    case TK_FOR:
+        return parse_for_loop_stmt(parser);
     default:
         p_advance(parser);
         return ASTNone;

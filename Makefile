@@ -29,3 +29,4 @@ test:
 	$(BUILD_PATH)/lua testfiles/assignment.lua
 	$(BUILD_PATH)/lua testfiles/expressions.lua
 	$(BUILD_PATH)/lua testfiles/controlflow.lua
+	$(BUILD_PATH)/lua testfiles/loops.lua

@@ -17,6 +17,7 @@ typedef enum ExprType {
     ExprCall,
     ExprUnary,
     ExprBinary,
+    ExprGroup,
 } ExprType;
 
 typedef struct Expr
@@ -27,7 +28,8 @@ typedef struct Expr
         bool boolean;
         double number;
         const char *string;
-        const char* variable;
+        const char *variable;
+        ASTIndex group;
 
         struct
         {

@@ -68,10 +68,10 @@ ASTIndex parse_expression(Parser *parser, Precedence precedence)
     ASTIndex left = prefix_rule(parser);
     while (precedence <= rules[parser->current.tok_type].precedence) {
         InfixFn infix_rule = rules[parser->current.tok_type].infix;
+        if (!infix_rule) return ASTNone;
         p_advance(parser);
         left = infix_rule(parser, left);
     }
-    p_advance(parser);
 
     return left;
 }
@@ -96,6 +96,10 @@ ASTIndex parse_primary(Parser *parser)
         variable = parser->previous.info.str;
         return alloc_expr(
             parser, (Expr){.type = ExprVariable, .as.variable = variable});
+    case TK_STRING:
+        variable = parser->previous.info.str;
+        return alloc_expr(parser,
+                          (Expr){.type = ExprString, .as.string = variable});
     default:
         return ASTNone;
     };
@@ -104,12 +108,32 @@ ASTIndex parse_primary(Parser *parser)
 ASTIndex parse_binary(Parser *parser, ASTIndex left)
 {
     ReservedToken op_type = parser->previous.tok_type;
-    Precedence precedence = rules[op_type].precedence;
-    ASTIndex right = parse_expression(parser, (Precedence)(precedence + 1));
+    ASTIndex right = parse_expression(parser, PREC_UNARY);
     return alloc_expr(parser, (Expr){.type = ExprBinary,
                                      .as.binary.l_expr = left,
                                      .as.binary.r_expr = right,
                                      .as.binary.op = op_type});
+}
+
+ASTIndex parse_unary(Parser *parser)
+{
+    ReservedToken op_type = parser->previous.tok_type;
+    Precedence precedence = rules[op_type].precedence;
+    ASTIndex left = parse_expression(parser, (Precedence)(precedence + 1));
+    return alloc_expr(parser, (Expr){.type = ExprUnary,
+                                     .as.unary.l_expr = left,
+                                     .as.unary.op = op_type});
+}
+
+ASTIndex parse_group(Parser *parser)
+{
+    ASTIndex group_expr = parse_expression(parser, PREC_ASSIGN);
+
+    if (p_match(parser, TK_RPAREN)) {
+        return alloc_expr(parser,
+                          (Expr){.type = ExprGroup, .as.group = group_expr});
+    }
+    return ASTNone;
 }
 
 const ParserRule rules[] = {
@@ -123,7 +147,7 @@ const ParserRule rules[] = {
 
     /* arithmetic expressions */
     [TK_ADD] = {NULL, parse_binary, PREC_TERM},
-    [TK_SUB] = {NULL, parse_binary, PREC_TERM},
+    [TK_SUB] = {parse_unary, parse_binary, PREC_TERM},
     [TK_MUL] = {NULL, parse_binary, PREC_FACTOR},
     [TK_DIV] = {NULL, parse_binary, PREC_FACTOR},
 
@@ -134,10 +158,15 @@ const ParserRule rules[] = {
     [TK_LT_EQ] = {NULL, parse_binary, PREC_COMPARE},
     [TK_GT] = {NULL, parse_binary, PREC_COMPARE},
     [TK_GT_EQ] = {NULL, parse_binary, PREC_COMPARE},
+
+    [TK_LPAREN] = {parse_group, NULL, PREC_NONE},
+    [TK_RPAREN] = {NULL, NULL, PREC_NONE},
+    [TK_EOF] = {NULL, NULL, PREC_NONE},
 };
 
 ASTIndex parse_assignment_statement(Parser *parser)
 {
+    p_advance(parser);
     const char *name = parser->previous.info.str;
     ASTIndex value = ASTNone;
     if (p_match(parser, TK_EQ)) {
@@ -166,7 +195,7 @@ ASTIndex parse_local_statement(Parser *parser)
 
 ASTIndex parse_statement(Parser *parser)
 {
-    switch (parser->previous.tok_type) {
+    switch (parser->current.tok_type) {
     case TK_NAME:
         return parse_assignment_statement(parser);
     case TK_LOCAL:
@@ -181,7 +210,8 @@ ASTIndex parse_block(Parser *parser)
 {
     ASTIndex first = ASTNone;
     ASTIndex last = ASTNone;
-    while (!is_block_end(parser->previous.tok_type)) {
+    while (!is_block_end(parser->current.tok_type) &&
+           !(parser->current.tok_type == TK_ILLEGAL)) {
         ASTIndex stmt = parse_statement(parser);
         if (stmt == ASTNone) continue;
         if (first == ASTNone) {
@@ -207,54 +237,18 @@ Expr *get_expression(Parser *parser, ASTIndex expr)
     return &parser->expr_pool[expr];
 }
 
-void print_expression(Parser *parser, Expr *expr)
-{
-    switch (expr->type) {
-    case ExprNil: {
-        printf("nil ");
-    } break;
-    case ExprBoolean: {
-        printf("%b ", expr->as.boolean);
-    } break;
-    case ExprNumber: {
-        printf("%f ", expr->as.number);
-    } break;
-    case ExprString: {
-        printf("%s ", expr->as.string);
-    } break;
-    case ExprVariable: {
-        printf("%s ", expr->as.variable);
-    } break;
-    case ExprCall: {
-        printf("not implemented");
-    } break;
-    case ExprUnary: {
-        printf("%d", expr->as.unary.op);
-        print_expression(parser, get_expression(parser, expr->as.unary.l_expr));
-    } break;
-    case ExprBinary: {
-        print_expression(parser,
-                         get_expression(parser, expr->as.binary.l_expr));
-        printf("%d ", expr->as.binary.op);
-        print_expression(parser,
-                         get_expression(parser, expr->as.binary.r_expr));
-    } break;
-    };
-}
-
 Parser *init_parser(const char *name)
 {
     Parser *parser = malloc(sizeof(Parser));
     if (!parser) return NULL;
     parser->lex_state = init_lexer(name);
-    parser->expr_pool = (Expr *)malloc(256);
+    parser->expr_pool = NULL;
     parser->expr_len = 1;
     parser->expr_capacity = 0;
-    parser->stmt_pool = (Statement *)malloc(256);
+    parser->stmt_pool = NULL;
     parser->stmt_len = 1;
     parser->stmt_capacity = 0;
     parser->current = lconsume(parser->lex_state);
-    p_advance(parser);
     return parser;
 }
 

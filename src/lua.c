@@ -6,6 +6,26 @@
 
 #include <stdio.h>
 
+void walk_ast(Parser *parser, Statement *root)
+{
+    ASTIndex stmt_idx = root->as.block.first_stmt;
+    while (stmt_idx != ASTNone) {
+        Statement *stmt = get_statement(parser, stmt_idx);
+        if (stmt != NULL && stmt->type == StmtAssignment) {
+            printf("%s = ", stmt->as.assignment.name);
+            Expr *value = get_expression(parser, stmt->as.assignment.value);
+            if (value != NULL) {
+                printf("<value>");
+            }
+        } else {
+            printf("statement is null\n");
+            break;
+        }
+        printf("\n");
+        stmt_idx = stmt->next;
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 1) {
@@ -17,21 +37,7 @@ int main(int argc, char **argv)
         Parser *parser = init_parser(params.filename);
         ASTIndex root_chunk_idx = parse_block(parser);
         Statement *root_chunk = get_statement(parser, root_chunk_idx);
-        ASTIndex stmt_idx = root_chunk->as.block.first_stmt;
-
-        while (stmt_idx != ASTNone) {
-            Statement *stmt = get_statement(parser, stmt_idx);
-            if (stmt != NULL && stmt->type == StmtAssignment) {
-                printf("%s = ", stmt->as.assignment.name);
-                Expr *value = get_expression(parser, stmt->as.assignment.value);
-                print_expression(parser, value);
-            } else {
-                printf("statement is null\n");
-                break;
-            }
-            printf("\n");
-            stmt_idx = stmt->next;
-        }
+        walk_ast(parser, root_chunk);
         return 0;
     }
 }

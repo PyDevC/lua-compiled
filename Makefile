@@ -27,3 +27,4 @@ fmt:
 
 test:
 	$(BUILD_PATH)/lua testfiles/assignment.lua
+	$(BUILD_PATH)/lua testfiles/expressions.lua

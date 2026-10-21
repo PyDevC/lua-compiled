@@ -1,1 +1,7 @@
-c = 10 * 20 + 200 / 233
+a = 10
+b = true
+c = false
+d = "hello"
+e = nil
+f = e
+g = -10

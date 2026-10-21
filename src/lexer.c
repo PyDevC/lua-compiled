@@ -192,22 +192,31 @@ Token make_number_token(Token token, LexerState *lex_state)
 
 Token make_string_token(Token token, LexerState *lex_state)
 {
-    // set hard limit for string length
-    char lname[200] = {'"'};
+    get_next_char(lex_state); // Consume opening quote
+
+    char lname[200];
     int idx = 0;
-    get_next_char(lex_state);
-    while (peek_next_char(lex_state) != '"') {
-        lname[idx] = get_next_char(lex_state);
-        idx++;
+
+    while (peek_next_char(lex_state) != '"' &&
+           peek_next_char(lex_state) != EOF) {
+        if (idx < (int)sizeof(lname) - 2) {
+            lname[idx++] = get_next_char(lex_state);
+        } else {
+            // String too long; consume rest or handle error
+            get_next_char(lex_state);
+        }
     }
-    lname[idx++] = '"';
+
+    if (peek_next_char(lex_state) == '"') {
+        get_next_char(lex_state); // Consume closing quote
+    } else {
+        token.tok_type = TK_ILLEGAL;
+        return token;
+    }
+
     lname[idx] = '\0';
     token.info.str = strdup(lname);
-    if (token.info.str == NULL) {
-        token.tok_type = TK_ILLEGAL;
-    } else {
-        token.tok_type = TK_STRING;
-    }
+    token.tok_type = TK_STRING;
     return token;
 }
 
@@ -244,15 +253,18 @@ Token lnext_token(LexerState *lex_state)
     }
 
     char c = peek_next_char(lex_state);
-    if (is_identifier(c)) {
+    if (is_identifier(c) || c == '"') {
         if (is_identifier_start(c)) {
             return make_identifier_token(token, lex_state);
         } else if (is_digit(c)) {
             return make_number_token(token, lex_state);
+        } else if (c == '"') {
+            return make_string_token(token, lex_state);
         }
     }
 
     // clang-format off
+    int called_get_next = 0;
     switch (peek_next_char(lex_state)) {
         case ',': { token.tok_type = TK_COMMA; } break;
         case '#': { token.tok_type = TK_HASH; } break;
@@ -265,7 +277,9 @@ Token lnext_token(LexerState *lex_state)
         case ';': { token.tok_type = TK_SEMICOLON; } break;
         case '=': { 
             get_next_char(lex_state);
+            called_get_next = 1;
             if(peek_next_char(lex_state) == '=') {
+                get_next_char(lex_state);
                 token.tok_type = TK_EQ_EQ;
             } else {
                 token.tok_type = TK_EQ;
@@ -273,14 +287,18 @@ Token lnext_token(LexerState *lex_state)
         } break;
         case '~': { 
             get_next_char(lex_state);
+            called_get_next = 1;
             if(peek_next_char(lex_state) == '=') {
+                get_next_char(lex_state);
                 token.tok_type = TK_NEQ;
             }
         } break;
         case '!': { token.tok_type = TK_BANG; } break;
         case '>': { 
             get_next_char(lex_state);
+            called_get_next = 1;
             if(peek_next_char(lex_state) == '=') {
+                get_next_char(lex_state);
                 token.tok_type = TK_GT_EQ;
             } else {
                 token.tok_type = TK_GT;
@@ -288,7 +306,9 @@ Token lnext_token(LexerState *lex_state)
         } break;
         case '<': { 
             get_next_char(lex_state);
+            called_get_next = 1;
             if(peek_next_char(lex_state) == '=') {
+                get_next_char(lex_state);
                 token.tok_type = TK_LT_EQ;
             } else {
                 token.tok_type = TK_LT;
@@ -297,7 +317,9 @@ Token lnext_token(LexerState *lex_state)
         case '+': { token.tok_type = TK_ADD; } break;
         case '-': { 
             get_next_char(lex_state);
+            called_get_next = 1;
             if(peek_next_char(lex_state) == '-') {
+                get_next_char(lex_state);
                 return make_comment_token(token, lex_state);
             } else {
                 token.tok_type = TK_SUB;
@@ -305,12 +327,11 @@ Token lnext_token(LexerState *lex_state)
         } break;
         case '*': { token.tok_type = TK_MUL; } break;
         case '/': { token.tok_type = TK_DIV; } break;
-        case '"': { 
-            return make_string_token(token, lex_state);
-        } break;
     };
 
-    get_next_char(lex_state);
+    if(called_get_next == 0) {
+        get_next_char(lex_state);
+    }
     return token;
 }
 

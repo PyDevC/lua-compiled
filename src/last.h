@@ -58,6 +58,10 @@ typedef enum {
     StmtBlock,
     StmtLocalVar,
     StmtAssignment,
+    StmtIfElse,
+    StmtWhile,
+    StmtDoWhile,
+    StmtForLoop,
     StmtExpr,
 } StmtType;
 
@@ -89,5 +93,13 @@ typedef struct
         {
             ASTIndex expr;
         } expr_stmt;
+
+        struct
+        {
+            // Can be if, else or elif
+            ASTIndex condition_expr;
+            ASTIndex first_stmt;
+            ASTIndex next_elif_or_else;
+        } if_else_stmt;
     } as;
 } Statement;

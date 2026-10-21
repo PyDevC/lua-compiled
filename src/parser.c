@@ -1,7 +1,8 @@
 #include "parser.h"
 #include <string.h>
 
-#define is_block_end(x) ((x == TK_END) || (x == TK_ELSE) || (x == TK_EOF))
+#define is_block_end(x)                                                        \
+    ((x == TK_END) || (x == TK_ELSE) || (x == TK_ELSEIF) || (x == TK_EOF))
 
 static ASTIndex alloc_expr(Parser *parser, Expr node)
 {
@@ -193,6 +194,80 @@ ASTIndex parse_local_statement(Parser *parser)
     }
 }
 
+ASTIndex parse_if_then_block(Parser *parser)
+{
+    ASTIndex expr_idx = parse_expression(parser, PREC_NONE);
+    ASTIndex block_idx = ASTNone;
+
+    if (p_match(parser, TK_THEN)) {
+        block_idx = parse_block(parser);
+    } else {
+        // error
+    }
+
+    ASTIndex stmt_idx = alloc_stmt(
+        parser, (Statement){.type = StmtIfElse,
+                            .as.if_else_stmt.condition_expr = expr_idx,
+                            .as.if_else_stmt.first_stmt = block_idx,
+                            .as.if_else_stmt.next_elif_or_else = ASTNone});
+    return stmt_idx;
+}
+
+ASTIndex parse_else_block(Parser *parser)
+{
+    ASTIndex block_idx = parse_block(parser);
+
+    ASTIndex stmt_idx = alloc_stmt(
+        parser, (Statement){.type = StmtIfElse,
+                            .as.if_else_stmt.condition_expr = ASTNone,
+                            .as.if_else_stmt.first_stmt = block_idx,
+                            .as.if_else_stmt.next_elif_or_else = ASTNone});
+    return stmt_idx;
+}
+
+ASTIndex parse_if_statement(Parser *parser)
+{
+    p_advance(parser);
+
+    ASTIndex if_stmt_idx = parse_if_then_block(parser);
+
+    ASTIndex elseif_prev_stmt_idx = ASTNone;
+    ASTIndex elseif_latest_stmt_idx = ASTNone;
+
+    while (p_match(parser, TK_ELSEIF)) {
+        if (elseif_prev_stmt_idx == ASTNone) {
+            elseif_latest_stmt_idx = parse_if_then_block(parser);
+            Statement *if_stmt = get_statement(parser, if_stmt_idx);
+            if_stmt->as.if_else_stmt.next_elif_or_else = elseif_latest_stmt_idx;
+        } else {
+            elseif_latest_stmt_idx = parse_if_then_block(parser);
+            Statement *elseif_prev_stmt =
+                get_statement(parser, elseif_prev_stmt_idx);
+            elseif_prev_stmt->as.if_else_stmt.next_elif_or_else =
+                elseif_latest_stmt_idx;
+        }
+        elseif_prev_stmt_idx = elseif_latest_stmt_idx;
+    }
+
+    if (p_match(parser, TK_ELSE)) {
+        ASTIndex else_stmt = parse_else_block(parser);
+        if (elseif_prev_stmt_idx == ASTNone) {
+            Statement *if_stmt = get_statement(parser, if_stmt_idx);
+            if_stmt->as.if_else_stmt.next_elif_or_else = else_stmt;
+        } else {
+            Statement *elseif_latest_stmt =
+                get_statement(parser, elseif_latest_stmt_idx);
+            elseif_latest_stmt->as.if_else_stmt.next_elif_or_else = else_stmt;
+        }
+    }
+
+    if (!p_match(parser, TK_END)) {
+        // error
+    }
+
+    return if_stmt_idx;
+}
+
 ASTIndex parse_statement(Parser *parser)
 {
     switch (parser->current.tok_type) {
@@ -201,6 +276,8 @@ ASTIndex parse_statement(Parser *parser)
     case TK_LOCAL:
         p_advance(parser);
         return parse_local_statement(parser);
+    case TK_IF:
+        return parse_if_statement(parser);
     default:
         p_advance(parser);
         return ASTNone;

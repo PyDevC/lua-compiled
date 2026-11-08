@@ -14,6 +14,7 @@ typedef enum {
     PREC_COMPARE, // < > <= >= == ~=
     PREC_TERM,    // + -
     PREC_FACTOR,  // % * /
+    PREC_CALL,    // func()
     PREC_UNARY,   // not #
     PREC_POWER,   // ^
     PREC_PRIMARY
@@ -45,6 +46,6 @@ Statement *get_statement(Parser *parser, ASTIndex stmt);
 Expr *get_expression(Parser *parser, ASTIndex expr);
 
 #ifdef PARSER_DEBUG
-void print_expression(Parser* parser, Expr *expr);
-void print_statement(Parser* parser, Statement* stmt);
+void print_expression(Parser *parser, Expr *expr);
+void print_statement(Parser *parser, Statement *stmt);
 #endif // PARSER_DEBUG

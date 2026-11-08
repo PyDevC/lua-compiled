@@ -20,6 +20,7 @@ static ASTIndex alloc_expr(Parser *parser, Expr node)
         if (!new_pool) return ASTNone;
         parser->expr_pool = new_pool;
     }
+    node.next = ASTNone;
     parser->expr_pool[parser->expr_len] = node;
     return parser->expr_len++;
 }
@@ -145,6 +146,33 @@ ASTIndex parse_group(Parser *parser)
     return ASTNone;
 }
 
+ASTIndex parse_call(Parser *parser, ASTIndex left)
+{
+    ASTIndex first = ASTNone;
+    ASTIndex last = ASTNone;
+    u32 argc = 0;
+
+    if (parser->current.tok_type != TK_RPAREN) {
+        do {
+            ASTIndex arg = parse_expression(parser, PREC_ASSIGN);
+            if (arg == ASTNone) return ASTNone;
+            if (first == ASTNone) {
+                first = arg;
+            } else {
+                parser->expr_pool[last].next = arg;
+            }
+            last = arg;
+            argc++;
+        } while (p_match(parser, TK_COMMA));
+    }
+    if (!p_match(parser, TK_RPAREN)) return ASTNone;
+
+    return alloc_expr(parser, (Expr){.type = ExprFuncCall,
+                                     .as.call.callee = left,
+                                     .as.call.first_arg = first,
+                                     .as.call.argc = argc});
+}
+
 const ParserRule rules[] = {
     /* Constants  */
     [TK_NIL] = {parse_primary, NULL, PREC_NONE},
@@ -168,25 +196,30 @@ const ParserRule rules[] = {
     [TK_GT] = {NULL, parse_binary, PREC_COMPARE},
     [TK_GT_EQ] = {NULL, parse_binary, PREC_COMPARE},
 
-    [TK_LPAREN] = {parse_group, NULL, PREC_NONE},
+    [TK_LPAREN] = {parse_group, parse_call, PREC_CALL},
     [TK_RPAREN] = {NULL, NULL, PREC_NONE},
     [TK_EOF] = {NULL, NULL, PREC_NONE},
 };
 
 ASTIndex parse_assignment_statement(Parser *parser)
 {
-    p_advance(parser);
-    const char *name = parser->previous.info.str;
-    ASTIndex value = ASTNone;
+    ASTIndex target = parse_expression(parser, PREC_CALL);
+    if (target == ASTNone) return ASTNone;
+
     if (p_match(parser, TK_EQ)) {
-        value = parse_expression(parser, PREC_ASSIGN);
-    } else if (p_match(parser, TK_LPAREN)) {
-        value = parse_expression(parser, PREC_ASSIGN);
-        return alloc_stmt(parser, (Statement){.type = StmtFuncCall});
+        if (get_expression(parser, target)->type != ExprVariable)
+            return ASTNone;
+        const char *name = get_expression(parser, target)->as.variable;
+        ASTIndex value = parse_expression(parser, PREC_ASSIGN);
+        return alloc_stmt(parser, (Statement){.type = StmtAssignment,
+                                              .as.assignment.name = name,
+                                              .as.assignment.value = value});
     }
-    return alloc_stmt(parser, (Statement){.type = StmtAssignment,
-                                          .as.assignment.name = name,
-                                          .as.assignment.value = value});
+
+    if (get_expression(parser, target)->type != ExprFuncCall) return ASTNone;
+
+    return alloc_stmt(
+        parser, (Statement){.type = StmtExpr, .as.expr_stmt.expr = target});
 }
 
 ASTIndex parse_local_statement(Parser *parser)
@@ -353,6 +386,50 @@ ASTIndex parse_for_loop_stmt(Parser *parser)
                                           .as.for_stmt.first_stmt = for_block});
 }
 
+ASTIndex parse_function_stmt(Parser *parser)
+{
+    p_advance(parser);
+    if (!p_match(parser, TK_NAME)) {
+        // error
+        return ASTNone;
+    }
+
+    const char *name = parser->previous.info.str;
+    if (!p_match(parser, TK_LPAREN)) {
+        // error
+        return ASTNone;
+    }
+
+    ASTIndex first = ASTNone;
+    ASTIndex last = ASTNone;
+    u32 argc = 0;
+
+    if (parser->current.tok_type != TK_RPAREN) {
+        do {
+            ASTIndex arg = parse_expression(parser, PREC_ASSIGN);
+            if (arg == ASTNone) return ASTNone;
+            if (first == ASTNone) {
+                first = arg;
+            } else {
+                parser->expr_pool[last].next = arg;
+            }
+            last = arg;
+            argc++;
+        } while (p_match(parser, TK_COMMA));
+    }
+    if (!p_match(parser, TK_RPAREN)) return ASTNone;
+
+    ASTIndex block_idx = parse_block(parser);
+    if (!p_match(parser, TK_END)) { // error
+    }
+    return alloc_stmt(parser,
+                      (Statement){.type = StmtFunction,
+                                  .as.func_stmt.name = name,
+                                  .as.func_stmt.first_arg = first,
+                                  .as.func_stmt.argc = argc,
+                                  .as.func_stmt.first_stmt = block_idx});
+}
+
 ASTIndex parse_statement(Parser *parser)
 {
     switch (parser->current.tok_type) {
@@ -368,6 +445,8 @@ ASTIndex parse_statement(Parser *parser)
         return parse_repeat_until_stmt(parser);
     case TK_FOR:
         return parse_for_loop_stmt(parser);
+    case TK_FUNCTION:
+        return parse_function_stmt(parser);
     default:
         p_advance(parser);
         return ASTNone;
@@ -454,8 +533,21 @@ void print_expression(Parser *parser, Expr *expr)
     case ExprVariable: {
         printf("%s ", expr->as.variable);
     } break;
-    case ExprCall: {
-        printf("not implemented");
+    case ExprFuncCall: {
+        print_expression(parser, get_expression(parser, expr->as.call.callee));
+        printf("(");
+        if (expr->as.call.argc > 0) {
+            ASTIndex arg_idx = expr->as.call.first_arg;
+            while (arg_idx != ASTNone) {
+                Expr *arg = get_expression(parser, arg_idx);
+                print_expression(parser, arg);
+                arg_idx = arg->next;
+                if (arg_idx != ASTNone) {
+                    break;
+                }
+            }
+        }
+        printf(")");
     } break;
     case ExprUnary: {
         print_token(expr->as.unary.op);
@@ -559,10 +651,25 @@ void print_statement(Parser *parser, Statement *stmt)
         print_statement(parser,
                         get_statement(parser, stmt->as.for_stmt.first_stmt));
     } break;
+    case StmtFunction: {
+        printf("function %s(", stmt->as.func_stmt.name);
+        if (stmt->as.func_stmt.argc > 0) {
+            ASTIndex arg_idx = stmt->as.func_stmt.first_arg;
+            while (arg_idx != ASTNone) {
+                Expr *arg = get_expression(parser, arg_idx);
+                print_expression(parser, arg);
+                printf(", ");
+                arg_idx = arg->next;
+            }
+        }
+        printf(")\n");
+        print_statement(parser,
+                        get_statement(parser, stmt->as.func_stmt.first_stmt));
+
+    } break;
     case StmtFuncCall: {
         print_expression(parser,
                          get_expression(parser, stmt->as.funccall.callee));
-        printf("()");
     } break;
     case StmtExpr: {
         print_expression(parser,

@@ -1,15 +1,20 @@
 #include "parser.h"
+#include <assert.h>
 #include <string.h>
 
 #define is_block_end(x)                                                        \
     ((x == TK_END) || (x == TK_ELSE) || (x == TK_ELSEIF) || (x == TK_UNTIL) || \
      (x == TK_EOF))
 
+u32 smart_pool_generator(size_t fsize) { return (u32)fsize * 3; }
+
 static ASTIndex alloc_expr(Parser *parser, Expr node)
 {
     if (parser->expr_len >= parser->expr_capacity) {
         parser->expr_capacity =
-            parser->expr_capacity == 0 ? 256 : 2 * parser->expr_capacity;
+            parser->expr_capacity == 0
+                ? smart_pool_generator(parser->lex_state->fbuffer->fsize)
+                : 2 * parser->expr_capacity;
         Expr *new_pool =
             realloc(parser->expr_pool, parser->expr_capacity * sizeof(Expr));
         if (!new_pool) return ASTNone;
@@ -23,7 +28,9 @@ static ASTIndex alloc_stmt(Parser *parser, Statement stmt)
 {
     if (parser->stmt_len >= parser->stmt_capacity) {
         parser->stmt_capacity =
-            parser->stmt_capacity == 0 ? 256 : 2 * parser->stmt_capacity;
+            parser->stmt_capacity == 0
+                ? smart_pool_generator(parser->lex_state->fbuffer->fsize)
+                : 2 * parser->stmt_capacity;
         Statement *new_pool = realloc(parser->stmt_pool, parser->stmt_capacity *
                                                              sizeof(Statement));
         if (!new_pool) return ASTNone;
@@ -173,6 +180,9 @@ ASTIndex parse_assignment_statement(Parser *parser)
     ASTIndex value = ASTNone;
     if (p_match(parser, TK_EQ)) {
         value = parse_expression(parser, PREC_ASSIGN);
+    } else if (p_match(parser, TK_LPAREN)) {
+        value = parse_expression(parser, PREC_ASSIGN);
+        return alloc_stmt(parser, (Statement){.type = StmtFuncCall});
     }
     return alloc_stmt(parser, (Statement){.type = StmtAssignment,
                                           .as.assignment.name = name,
@@ -181,6 +191,7 @@ ASTIndex parse_assignment_statement(Parser *parser)
 
 ASTIndex parse_local_statement(Parser *parser)
 {
+    p_advance(parser);
     if (p_match(parser, TK_NAME)) {
         const char *name = parser->previous.info.str;
         ASTIndex value = ASTNone;
@@ -197,7 +208,7 @@ ASTIndex parse_local_statement(Parser *parser)
 
 ASTIndex parse_if_then_block(Parser *parser)
 {
-    ASTIndex expr_idx = parse_expression(parser, PREC_NONE);
+    ASTIndex expr_idx = parse_expression(parser, PREC_ASSIGN);
     ASTIndex block_idx = ASTNone;
 
     if (p_match(parser, TK_THEN)) {
@@ -229,7 +240,6 @@ ASTIndex parse_else_block(Parser *parser)
 ASTIndex parse_if_statement(Parser *parser)
 {
     p_advance(parser);
-
     ASTIndex if_stmt_idx = parse_if_then_block(parser);
 
     ASTIndex elseif_prev_stmt_idx = ASTNone;
@@ -272,7 +282,7 @@ ASTIndex parse_if_statement(Parser *parser)
 ASTIndex parse_while_loop_stmt(Parser *parser)
 {
     p_advance(parser);
-    ASTIndex while_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex while_expr = parse_expression(parser, PREC_ASSIGN);
     ASTIndex while_block = parse_block(parser);
     if (!p_match(parser, TK_END)) {
         // error
@@ -293,7 +303,7 @@ ASTIndex parse_repeat_until_stmt(Parser *parser)
     if (!p_match(parser, TK_UNTIL)) {
         // error
     }
-    ASTIndex until_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex until_expr = parse_expression(parser, PREC_ASSIGN);
 
     return alloc_stmt(
         parser,
@@ -315,15 +325,15 @@ ASTIndex parse_for_loop_stmt(Parser *parser)
         // error
     }
 
-    ASTIndex start_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex start_expr = parse_expression(parser, PREC_ASSIGN);
     if (!p_match(parser, TK_COMMA)) {
         // error
     }
 
-    ASTIndex end_expr = parse_expression(parser, PREC_NONE);
+    ASTIndex end_expr = parse_expression(parser, PREC_ASSIGN);
     ASTIndex step_expr = ASTNone;
     if (p_match(parser, TK_COMMA)) {
-        step_expr = parse_expression(parser, PREC_NONE);
+        step_expr = parse_expression(parser, PREC_ASSIGN);
     }
 
     if (!p_match(parser, TK_DO)) {
@@ -349,7 +359,6 @@ ASTIndex parse_statement(Parser *parser)
     case TK_NAME:
         return parse_assignment_statement(parser);
     case TK_LOCAL:
-        p_advance(parser);
         return parse_local_statement(parser);
     case TK_IF:
         return parse_if_statement(parser);
@@ -388,11 +397,13 @@ ASTIndex parse_block(Parser *parser)
 
 Statement *get_statement(Parser *parser, ASTIndex stmt)
 {
+    assert(stmt != ASTNone);
     return &parser->stmt_pool[stmt];
 }
 
 Expr *get_expression(Parser *parser, ASTIndex expr)
 {
+    assert(expr != ASTNone);
     return &parser->expr_pool[expr];
 }
 
@@ -418,3 +429,146 @@ void destroy_parser(Parser *parser)
     free(parser->lex_state);
     free(parser);
 }
+
+#ifdef PARSER_DEBUG
+
+void print_expression(Parser *parser, Expr *expr)
+{
+    if (expr == NULL) {
+        printf("it's null");
+        return;
+    }
+    switch (expr->type) {
+    case ExprNil: {
+        printf("nil ");
+    } break;
+    case ExprBoolean: {
+        printf("%b ", expr->as.boolean);
+    } break;
+    case ExprNumber: {
+        printf("%f ", expr->as.number);
+    } break;
+    case ExprString: {
+        printf("%s ", expr->as.string);
+    } break;
+    case ExprVariable: {
+        printf("%s ", expr->as.variable);
+    } break;
+    case ExprCall: {
+        printf("not implemented");
+    } break;
+    case ExprUnary: {
+        print_token(expr->as.unary.op);
+        printf(" ");
+        print_expression(parser, get_expression(parser, expr->as.unary.l_expr));
+    } break;
+    case ExprBinary: {
+        print_expression(parser,
+                         get_expression(parser, expr->as.binary.l_expr));
+        print_token(expr->as.binary.op);
+        printf(" ");
+        print_expression(parser,
+                         get_expression(parser, expr->as.binary.r_expr));
+    } break;
+    case ExprGroup: {
+        printf("(");
+        print_expression(parser, get_expression(parser, expr->as.group));
+        printf(")");
+    } break;
+    default:
+        printf("unsupported");
+    };
+}
+
+void print_statement(Parser *parser, Statement *stmt)
+{
+    switch (stmt->type) {
+    case StmtBlock: {
+        ASTIndex stmt_idx = stmt->as.block.first_stmt;
+        printf("Block:\n");
+        while (stmt_idx != ASTNone) {
+            stmt = get_statement(parser, stmt_idx);
+            print_statement(parser, stmt);
+            printf("\n");
+            stmt_idx = stmt->next;
+        }
+        printf("end\n");
+    } break;
+    case StmtLocalVar: {
+        printf("local ");
+        printf("%s = ", stmt->as.local_var.name);
+        print_expression(parser,
+                         get_expression(parser, stmt->as.local_var.value));
+    } break;
+    case StmtAssignment: {
+        printf("%s = ", stmt->as.assignment.name);
+        print_expression(parser,
+                         get_expression(parser, stmt->as.assignment.value));
+    } break;
+    case StmtIfElse: {
+        printf("if (");
+        print_expression(
+            parser,
+            get_expression(parser, stmt->as.if_else_stmt.condition_expr));
+        printf(") then\n");
+        Statement *block =
+            get_statement(parser, stmt->as.if_else_stmt.first_stmt);
+        print_statement(parser, block);
+        if (stmt->as.if_else_stmt.next_elif_or_else != ASTNone) {
+            Statement *elif_or_else =
+                get_statement(parser, stmt->as.if_else_stmt.next_elif_or_else);
+            if (elif_or_else) {
+                printf("else or elif");
+                print_statement(parser, elif_or_else);
+            }
+        }
+    } break;
+    case StmtWhile: {
+        assert(!stmt->as.while_or_repeat_stmt.is_repat_until);
+        printf("while (");
+        print_expression(
+            parser, get_expression(
+                        parser, stmt->as.while_or_repeat_stmt.condition_expr));
+        printf(") do\n");
+        Statement *block =
+            get_statement(parser, stmt->as.while_or_repeat_stmt.first_stmt);
+        print_statement(parser, block);
+    } break;
+    case StmtRepeatUntil: {
+        assert(stmt->as.while_or_repeat_stmt.is_repat_until);
+        printf("repeat until (");
+        print_expression(
+            parser, get_expression(
+                        parser, stmt->as.while_or_repeat_stmt.condition_expr));
+        printf(") do\n");
+        Statement *block =
+            get_statement(parser, stmt->as.while_or_repeat_stmt.first_stmt);
+        print_statement(parser, block);
+    } break;
+    case StmtForLoop: {
+        printf("for %s = ", stmt->as.for_stmt.var);
+        print_expression(parser,
+                         get_expression(parser, stmt->as.for_stmt.start_expr));
+        printf(", ");
+        print_expression(parser,
+                         get_expression(parser, stmt->as.for_stmt.end_expr));
+        printf(", ");
+        print_expression(parser,
+                         get_expression(parser, stmt->as.for_stmt.step_expr));
+        printf("do\n");
+        print_statement(parser,
+                        get_statement(parser, stmt->as.for_stmt.first_stmt));
+    } break;
+    case StmtFuncCall: {
+        print_expression(parser,
+                         get_expression(parser, stmt->as.funccall.callee));
+        printf("()");
+    } break;
+    case StmtExpr: {
+        print_expression(parser,
+                         get_expression(parser, stmt->as.expr_stmt.expr));
+    } break;
+    };
+}
+
+#endif // PARSER_DEBUG

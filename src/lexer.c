@@ -180,7 +180,8 @@ Token make_number_token(Token token, LexerState *lex_state)
 {
     char lname[64] = "";
     int idx = 0;
-    while (is_digit(peek_next_char(lex_state))) {
+    while (is_digit(peek_next_char(lex_state)) ||
+           peek_next_char(lex_state) == '.') {
         lname[idx] = get_next_char(lex_state);
         idx++;
     }
@@ -406,3 +407,167 @@ LexerState *init_lexer(const char *filename)
 
     return lex_state;
 }
+
+#ifdef PARSER_DEBUG
+void print_token(ReservedToken tok)
+{
+    switch (tok) {
+    /* Keywords */
+    case TK_AND:
+        printf("and");
+        break;
+    case TK_BREAK:
+        printf("break");
+        break;
+    case TK_DO:
+        printf("do");
+        break;
+    case TK_ELSE:
+        printf("else");
+        break;
+    case TK_ELSEIF:
+        printf("elseif");
+        break;
+    case TK_END:
+        printf("end");
+        break;
+    case TK_FALSE:
+        printf("false");
+        break;
+    case TK_FOR:
+        printf("for");
+        break;
+    case TK_FUNCTION:
+        printf("function");
+        break;
+    case TK_IF:
+        printf("if");
+        break;
+    case TK_IN:
+        printf("in");
+        break;
+    case TK_LOCAL:
+        printf("local");
+        break;
+    case TK_NIL:
+        printf("nil");
+        break;
+    case TK_NOT:
+        printf("not");
+        break;
+    case TK_OR:
+        printf("or");
+        break;
+    case TK_REPEAT:
+        printf("repeat");
+        break;
+    case TK_RETURN:
+        printf("return");
+        break;
+    case TK_THEN:
+        printf("then");
+        break;
+    case TK_TRUE:
+        printf("true");
+        break;
+    case TK_UNTIL:
+        printf("until");
+        break;
+    case TK_WHILE:
+        printf("while");
+        break;
+
+    /* Symbols */
+    case TK_COMMA:
+        printf(",");
+        break;
+    case TK_HASH:
+        printf("#");
+        break;
+    case TK_LPAREN:
+        printf("(");
+        break;
+    case TK_RPAREN:
+        printf(")");
+        break;
+    case TK_LBRACE:
+        printf("{");
+        break;
+    case TK_RBRACE:
+        printf("}");
+        break;
+    case TK_LBRACKET:
+        printf("[");
+        break;
+    case TK_RBRACKET:
+        printf("]");
+        break;
+    case TK_SEMICOLON:
+        printf(";");
+        break;
+    case TK_EQ:
+        printf("=");
+        break;
+    case TK_EQ_EQ:
+        printf("==");
+        break;
+    case TK_NEQ:
+        printf("~=");
+        break;
+    case TK_BANG:
+        printf("!");
+        break;
+    case TK_GT:
+        printf(">");
+        break;
+    case TK_GT_EQ:
+        printf(">=");
+        break;
+    case TK_LT:
+        printf("<");
+        break;
+    case TK_LT_EQ:
+        printf("<=");
+        break;
+    case TK_ADD:
+        printf("+");
+        break;
+    case TK_SUB:
+        printf("-");
+        break;
+    case TK_MUL:
+        printf("*");
+        break;
+    case TK_DIV:
+        printf("/");
+        break;
+
+    /* Types & Special */
+    case TK_NUMBER:
+        printf("<number>");
+        break;
+    case TK_STRING:
+        printf("<string>");
+        break;
+    case TK_NAME:
+        printf("<name>");
+        break;
+    case TK_ILLEGAL:
+        printf("<illegal>");
+        break;
+    case TK_EOF:
+        printf("<eof>");
+        break;
+    case TK_EMPTY:
+        printf("<empty>");
+        break;
+    case TK_COMMENT:
+        printf("<comment>");
+        break;
+    default:
+        printf("?");
+        break;
+    }
+}
+
+#endif // PARSER_DEBUG

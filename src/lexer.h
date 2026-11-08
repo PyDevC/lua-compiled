@@ -131,3 +131,10 @@ Token lconsume(LexerState *lex_state);
  */
 Token lpeek_next(LexerState *lex_state);
 const char *token_to_string(Token token);
+
+#ifdef PARSER_DEBUG
+/*
+ * Print the reserved token type as chars
+ */
+void print_token(ReservedToken tok_type);
+#endif // PARSER_DEBUG

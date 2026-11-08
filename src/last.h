@@ -18,6 +18,7 @@ typedef enum ExprType {
     ExprUnary,
     ExprBinary,
     ExprGroup,
+    ExprFuncCall,
 } ExprType;
 
 typedef struct Expr
@@ -33,7 +34,7 @@ typedef struct Expr
 
         struct
         {
-            ASTIndex callee;
+            const char *callee;
             ASTIndex first_arg;
             u32 arg_count;
         } call;
@@ -62,6 +63,7 @@ typedef enum {
     StmtWhile,
     StmtRepeatUntil,
     StmtForLoop,
+    StmtFuncCall,
     StmtExpr,
 } StmtType;
 
@@ -117,5 +119,10 @@ typedef struct
             ASTIndex step_expr;
             ASTIndex first_stmt;
         } for_stmt;
+
+        struct
+        {
+            ASTIndex callee;
+        } funccall;
     } as;
 } Statement;

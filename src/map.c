@@ -1,8 +1,14 @@
 #include "map.h"
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#define FIBO_HASH_PRIME 11400714819323198485ULL
+#define FNV_OFFSET 14695981039346656037ULL
+#define FNV_PRIME 1099511628211ULL
 
 typedef struct
 {
@@ -18,14 +24,15 @@ struct hmap
     size_t length;
 };
 
-hmap *map_create()
+// TODO: check what you should use size_t or u32
+hmap *map_create(size_t capacity)
 {
     hmap *maplist = malloc(sizeof(hmap));
     if (maplist == NULL) {
         return NULL;
     }
 
-    maplist->capacity = MAP_CAPACITY_INIT;
+    maplist->capacity = capacity < 1 ? MAP_CAPACITY_INIT : capacity;
     maplist->length = 0;
 
     maplist->entries = malloc(sizeof(map_entry) * maplist->capacity);
@@ -45,14 +52,11 @@ void map_destroy(hmap *maplist)
     free(maplist);
 }
 
-size_t fibo_hash_key(size_t hash)
-{
-    return (hash * FIBO_HASH_PRIME) >> FIBO_OFFSET_MINI;
-}
+size_t fibo_hash_key(size_t hash) { return (hash * FIBO_HASH_PRIME) >> 11; }
 
 size_t hash_key(const char *key)
 {
-    size_t hash = FIBO_OFFSET;
+    size_t hash = FNV_OFFSET;
     size_t prime = FIBO_HASH_PRIME;
 
     while (*key) {
@@ -62,21 +66,49 @@ size_t hash_key(const char *key)
     return hash;
 }
 
+hmap *map_resize(hmap *maplist, size_t new_capacity)
+{
+    map_entry *new_entries = calloc(new_capacity, sizeof *new_entries);
+    char *new_index_list = calloc(new_capacity, sizeof *new_index_list);
+
+    for (int i = 0; i < maplist->capacity; ++i) {
+        if (maplist->index_list[i] == 0) {
+            continue;
+        }
+
+        const char *key = maplist->entries[i].key;
+        void *value = maplist->entries[i].data;
+
+        size_t hash = hash_key(key);
+        size_t index = (size_t)(fibo_hash_key(hash) & (new_capacity - 1));
+        while (new_index_list[index] != 0) {
+            index++;
+            index = index % new_capacity;
+        }
+
+        new_entries[index].data = value;
+        new_entries[index].key = key;
+        new_index_list[index] = 1;
+    }
+
+    free(maplist->entries);
+    free(maplist->index_list);
+    maplist->entries = new_entries;
+    maplist->index_list = new_index_list;
+    maplist->capacity = new_capacity;
+    return maplist;
+}
+
 const char *map_set_entry(hmap *maplist, const char *key, void *value)
 {
+    if ((maplist->length * 2) >= maplist->capacity) {
+        maplist = map_resize(maplist, maplist->capacity * 2);
+    }
+
     size_t hash = hash_key(key);
     size_t index = (size_t)(fibo_hash_key(hash) & (maplist->capacity - 1));
 
     while (maplist->index_list[index] != 0) {
-        if ((maplist->length * 2) >= maplist->capacity) {
-            maplist->entries = realloc(
-                maplist->entries, sizeof(map_entry) * maplist->capacity * 2);
-
-            maplist->index_list = realloc(maplist->index_list,
-                                          sizeof(char) * maplist->capacity * 2);
-            maplist->capacity = maplist->capacity * 2;
-        }
-
         index++;
         index = index % maplist->capacity;
     }
@@ -94,7 +126,7 @@ void *map_get_value(hmap *maplist, const char *key)
     size_t index = (size_t)(fibo_hash_key(hash) & (maplist->capacity - 1));
 
     while (maplist->index_list[index] == 1) {
-        if (strcmp(maplist->entries[index].key, key) != 0) {
+        if (strcmp(maplist->entries[index].key, key) == 0) {
             return maplist->entries[index].data;
         }
         index = (index + 1) % maplist->capacity;

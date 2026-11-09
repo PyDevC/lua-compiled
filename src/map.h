@@ -1,37 +1,22 @@
 #pragma once
 
-#include <limits.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <stddef.h>
-#include <stdio.h>
 
-#define MAP_CAPACITY_INIT 10
-#define FIBO_HASH_PRIME 11400714819323198485LLU
-#define FIBO_OFFSET 0xcbf29ce484222325LLU
-#define FIBO_OFFSET_MINI 11
+#define MAP_CAPACITY_INIT 8
 
 typedef struct hmap hmap;
 
-hmap *map_create();
+hmap *map_create(size_t capacity);
 void map_destroy(hmap *maplist);
-void *map_get_value(hmap *maplist, const char *key);
+
+/* Copies key. Returns stored key copy, or NULL on allocation failure.
+ * Existing key: value replaced. */
 const char *map_set_entry(hmap *maplist, const char *key, void *value);
+
+/* Returns value or NULL if absent. */
+void *map_get_value(hmap *maplist, const char *key);
+
+/* Returns removed value or NULL if absent. */
 void *map_delete_entry(hmap *maplist, const char *key);
+
 size_t map_size(hmap *maplist);
-
-/* Hash Iterators */
-typedef struct
-{
-    const char *key;
-    void *value;
-    hmap *_table;
-    size_t _index;
-} hmap_itr;
-
-hmap_itr hmap_itr_create(hmap *maplist);
-bool hmap_itr_next(hmap_itr *iter);
-
-/* Fibonacci hashing function */
-size_t fibo_hash_key(size_t hash);
-size_t hash_key(const char *key);

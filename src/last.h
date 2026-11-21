@@ -1,12 +1,25 @@
-#pragma once
+/* ========================================================================
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
+   $File: last.h
+   $Date: 2026/11/20
+   $Revision: 1
 
-#define ASTIndex uint32_t
-#define u32 uint32_t
-#define ASTNone ((uint32_t)-1)
+   "last.h" is the old name for the tree (Lua AST). The layout is unchanged
+   in spirit: dense arrays of nodes, ASTIndex instead of pointers, and a
+   "next" link for sibling lists. Two node kinds were added (return/break)
+   because function.lua actually uses `return`.
+
+   ======================================================================== */
+
+#ifndef LUA_LAST_H
+#define LUA_LAST_H
+
+#include "defs.h"
+#include "lexer.h"
+#include "types.h"
+
+#define ASTIndex u32
+#define ASTNone ((u32)-1)
 
 typedef enum ExprType {
     ExprNil,
@@ -24,38 +37,48 @@ typedef struct Expr
 {
     ExprType type;
     ASTIndex next;
+
+    /* Filled by the semantic pass. SymbolIndex is ASTNone for expressions
+     * that do not name a variable. */
+    u32 SymbolIndex;
+    lua_type Type;
+
+    /* Set while the semantic pass visits the callee of a direct call. Builtins
+     * lower inline and have no first-class address, so using `print` as a value
+     * is rejected everywhere except this position. */
+    b32 IsCallCallee;
+
     union
     {
-        bool boolean;
-        double number;
+        b32 boolean;
+        f64 num;
         const char *string;
         const char *variable;
         ASTIndex group;
 
         struct
         {
-            ASTIndex callee;
-            ASTIndex first_arg;
-            u32 argc;
-        } call;
-
-        struct
-        {
-            u32 op;
+            ReservedToken op;
             ASTIndex l_expr;
         } unary;
 
         struct
         {
-            u32 op;
+            ReservedToken op;
             ASTIndex l_expr;
             ASTIndex r_expr;
         } binary;
 
+        struct
+        {
+            ASTIndex callee;
+            ASTIndex i_arg;
+            u32 argc;
+        } call;
     } as;
 } Expr;
 
-typedef enum {
+typedef enum StmtType {
     StmtBlock,
     StmtLocalVar,
     StmtAssignment,
@@ -66,18 +89,25 @@ typedef enum {
     StmtFuncCall,
     StmtFunction,
     StmtExpr,
+    StmtReturn,
+    StmtBreak,
 } StmtType;
 
-typedef struct
+typedef struct Statement
 {
     StmtType type;
     ASTIndex next;
+
+    /* Filled by the semantic pass; Type.SignatureIndex identifies a function
+     * definition when type is StmtFunction. */
+    u32 SymbolIndex;
+    lua_type Type;
 
     union
     {
         struct
         {
-            ASTIndex first_stmt;
+            ASTIndex block_idx; /* first statement in the block */
         } block;
 
         struct
@@ -90,41 +120,34 @@ typedef struct
         {
             const char *name;
             ASTIndex value;
-        } assignment;
+        } assign;
+
+        ASTIndex expr_stmt;
 
         struct
         {
-            ASTIndex expr;
-        } expr_stmt;
+            ASTIndex cond;
+            ASTIndex block_idx;
+            ASTIndex next_el; /* next elseif or else statement */
+        } if_stmt;
 
         struct
         {
-            // Can be if, else or elif
-            ASTIndex condition_expr;
-            ASTIndex first_stmt;
-            ASTIndex next_elif_or_else;
-        } if_else_stmt;
-
-        struct
-        {
-            ASTIndex condition_expr;
-            ASTIndex first_stmt;
-            bool is_repat_until;
+            ASTIndex cond;
+            ASTIndex block_idx;
+            b32 is_repeat_until;
         } while_or_repeat_stmt;
 
         struct
         {
             const char *var;
-            ASTIndex start_expr;
-            ASTIndex end_expr;
-            ASTIndex step_expr;
-            ASTIndex first_stmt;
+            ASTIndex start;
+            ASTIndex end_;
+            ASTIndex step;
+            ASTIndex block_idx;
         } for_stmt;
 
-        struct
-        {
-            ASTIndex callee;
-        } funccall;
+        ASTIndex funccall;
 
         struct
         {
@@ -133,5 +156,9 @@ typedef struct
             u32 argc;
             ASTIndex first_stmt;
         } func_stmt;
+
+        ASTIndex return_value;
     } as;
 } Statement;
+
+#endif /* LUA_LAST_H */

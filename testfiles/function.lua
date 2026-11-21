@@ -15,4 +15,4 @@ call(10 + 10)
 call2(10, 20)
 
 local a = call(10)
-a = call(10) + call2(10)
+a = call(10) + call2(10, 5)

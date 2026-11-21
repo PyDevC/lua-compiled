@@ -1,3 +1,4 @@
+a = 10
 b = a >= 10
 a1 = 10 + 20 - 5 * 2
 b1 = (15 / 3) + (4 * 2) - 1
@@ -58,11 +59,11 @@ s3 = 10.0 - 2.5 - 1.25 - 0.75
 t3 = (4.0 * 2.0) + (3.0 * 2.0)
 a4 = true and false or true
 c4 = (5 > 3) and (10 < 20)
-d4 = true + true
-h4 = (true / true) + (false + true)
+d4 = true == true
+h4 = (4 / 2) + (5 - 3)
 j4 = true and (2 * 3 == 6)
 k4 = false or false or true
-r4 = (true + false) * (true + true)
+r4 = (1 + 0) * (1 + 1)
 s4 = (5 == 5) and (6 == 6) and (7 == 7)
 k = (10 - 5) * (2 + 3) / 5
 l = 1 + 2 * 3 - 4 / 2

@@ -1,32 +1,37 @@
-WARN_LIMIT=20
-CC_WARNING=-fmax-errors=$(WARN_LIMIT) \
-		   -Werror \
-		   -Wextra \
-		   -Wformat-overflow \
-		   -Wconversion \
+CC ?= gcc
+CFLAGS = -std=c11 -O3 -Wall -Wextra -Werror
+DEBUG_FLAGS = -std=c11 -g -O0 -Wall -Wextra -Werror -DDEBUG_LUA=1
+BUILD_PATH = build
+BENCH_ARGS ?=
 
-CC=gcc
-flags=-Wall
-DEBUG=-g -DDEBUG_LUA=1
-BUILD_PATH=build
+TESTFILES = assignment expressions controlflow loops function imports smoke big
 
-.PHONY: all build test debug fmt
+.PHONY: all build debug test clean bench bench-clean
 
 all: build test
 
 build:
-	mkdir -p build
-	$(CC) $(CC_WARNING) $(flags) src/*.c -O3 -o $(BUILD_PATH)/lua
+	mkdir -p $(BUILD_PATH)
+	$(CC) $(CFLAGS) src/lua.c -o $(BUILD_PATH)/lua
 
-debug: 
-	mkdir -p build
-	$(CC) $(CC_WARNING) $(flags) $(DEBUG) src/*.c -o $(BUILD_PATH)/lua
+debug:
+	mkdir -p $(BUILD_PATH)
+	$(CC) $(DEBUG_FLAGS) src/lua.c -o $(BUILD_PATH)/lua
 
-fmt:
-	clang-format --style=file -i src/*
+test: build
+	@for name in $(TESTFILES); do \
+		echo "compile ok: testfiles/$$name.lua"; \
+		$(BUILD_PATH)/lua -v -s $(BUILD_PATH)/$$name.s testfiles/$$name.lua || exit 1; \
+		$(CC) $(BUILD_PATH)/$$name.s -o $(BUILD_PATH)/$$name || exit 1; \
+		echo "run ok: testfiles/$$name.lua"; \
+		$(BUILD_PATH)/$$name || exit 1; \
+	done
 
-test:
-	$(BUILD_PATH)/lua testfiles/assignment.lua
-	$(BUILD_PATH)/lua testfiles/expressions.lua
-	$(BUILD_PATH)/lua testfiles/controlflow.lua
-	$(BUILD_PATH)/lua testfiles/loops.lua
+bench: build
+	$(MAKE) -C benchmark run BENCH_ARGS="$(BENCH_ARGS)"
+
+bench-clean:
+	$(MAKE) -C benchmark clean
+
+clean: bench-clean
+	rm -rf $(BUILD_PATH)

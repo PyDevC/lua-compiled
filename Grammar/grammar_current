@@ -2,27 +2,33 @@
 
 	block ::= chunk
 
-	stat ::=  var `=´ exp 
-            | local Name [`=´ exp] 
+	stat ::=  var `=´ exp
+	        | functioncall
+	        | `do´ block `end´
+	        | `while´ exp `do´ block `end´
+	        | `repeat´ block `until´ exp
+	        | `if´ exp `then´ block {`elseif´ exp `then´ block} [`else´ block] `end´
+	        | `for´ Name `=´ exp `,´ exp [`,´ exp] `do´ block `end´
+	        | `function´ Name `(` [namelist] `)` block `end´
+	        | `local´ Name [`=´ exp]
+	        | `return´ [exp]
+	        | `break´
 
-	var ::=  Name
+	var ::= Name
 
-	exp ::=  nil 
-           | false 
-           | true 
-           | Number 
-           | prefixexp 
-           | exp binop exp 
-           | unop exp 
+	namelist ::= Name {`,´ Name}
 
-	prefixexp ::= var 
-                | `(´ exp `)´
+	exp ::= nil | false | true | Number | String | var
+	      | `(` exp `)`
+	      | exp binop exp
+	      | unop exp
+	      | prefixexp `(` [explist] `)`
 
-	binop ::= `*´ 
-             | `/´ 
-             | `-´ 
-             | `+`
+	explist ::= {exp `,´} exp
 
-	unop ::= `-´ 
-            | not 
-            | `#´
+	binop ::= `+´ | `-´ | `*´ | `/´ | `==´ | `~=´
+	        | `<´ | `<=´ | `>´ | `>=´ | and | or
+
+	unop ::= `-´ | not | `#´
+
+	comment ::= `--´ {any char} [newline]

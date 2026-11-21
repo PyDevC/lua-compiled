@@ -10,7 +10,7 @@ end
 i = 1
 repeat
     i = i + 1
-until i < 10
+until i >= 10
 
 for i = 0, 10, 1 do
 end

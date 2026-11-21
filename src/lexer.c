@@ -1,573 +1,534 @@
+/* ========================================================================
+
+   $File: lexer.c
+   $Date: 2026/11/20
+   $Revision: 1
+
+   This is the Casey-style lexer we started from. The only structural change
+   is that CopySliceToCString pushes into the compile arena instead of
+   malloc'ing: a token's text lives exactly as long as the compiler does.
+
+   ======================================================================== */
+
 #include "lexer.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+/* SWAR helpers. x86-64 is little-endian, so byte i of Word is byte i of the
+ * source. A 64-bit load scans eight identifier characters or whitespace
+ * characters per iteration without touching the arena or the token pools. */
+#define SWAR_ONES 0x0101010101010101ull
+#define SWAR_HIGH 0x8080808080808080ull
+#define SWAR_HASZERO(X) (((X) - SWAR_ONES) & ~(X) & SWAR_HIGH)
+#define SWAR_HASLESS(X, N)                                                     \
+    (((X) - (SWAR_ONES * (u64)(N))) & ~(X) & SWAR_HIGH)
+#define SWAR_GE(X, N) (~SWAR_HASLESS(X, N) & SWAR_HIGH)
+#define SWAR_LE(X, N) SWAR_HASLESS(X, (N) + 1)
 
-#define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-#define is_digit(c) (c >= '0' && c <= '9')
-#define is_alnum(c) (is_digit(c) || is_alpha(c))
-#define is_blank(c) (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-#define is_identifier_start(c) (is_alpha(c) || c == '_')
-#define is_identifier(c) (is_alnum(c) || c == '_')
+internal b32 IsIdentChar(char C);
+internal void AdvanceCursor(lexer_cursor *Cursor, u32 Count);
 
-static const KeywordEntry keywords[] = {
-    {TK_AND, "and"},       {TK_BREAK, "break"},   {TK_DO, "do"},
-    {TK_ELSE, "else"},     {TK_ELSEIF, "elseif"}, {TK_END, "end"},
-    {TK_FALSE, "false"},   {TK_FOR, "for"},       {TK_FUNCTION, "function"},
-    {TK_IF, "if"},         {TK_IN, "in"},         {TK_LOCAL, "local"},
-    {TK_NIL, "nil"},       {TK_NOT, "not"},       {TK_OR, "or"},
-    {TK_REPEAT, "repeat"}, {TK_RETURN, "return"}, {TK_THEN, "then"},
-    {TK_TRUE, "true"},     {TK_UNTIL, "until"},   {TK_WHILE, "while"}};
-
-static ReservedToken keyword_type(const char *name)
+internal u64
+LoadU64(const char *At)
 {
-    size_t num_keywords = sizeof(keywords) / sizeof(keywords[0]);
-    for (size_t i = 0; i < num_keywords; i++) {
-        if (strcmp(keywords[i].name, name) == 0) {
-            return keywords[i].type;
+    u64 Result = 0;
+    memcpy(&Result, At, sizeof(Result));
+    return(Result);
+}
+
+internal u64
+LoadPaddedU64(const char *At, u32 Length)
+{
+    u64 Result = 0;
+    u32 Count = Minimum(Length, 8);
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        Result |= ((u64)(u8)At[Index] << (8 * Index));
+    }
+    return(Result);
+}
+
+internal u64
+IdentifierCharMask(u64 Word)
+{
+    u64 Digit = SWAR_GE(Word, '0') & SWAR_LE(Word, '9');
+    u64 Folded = Word | (SWAR_ONES * 0x20);
+    u64 Letter = SWAR_GE(Folded, 'a') & SWAR_LE(Folded, 'z');
+    u64 Underscore = SWAR_HASZERO(Word ^ (SWAR_ONES * '_'));
+    return((Digit | Letter | Underscore) & SWAR_HIGH);
+}
+
+internal u64
+WhitespaceMask(u64 Word)
+{
+    u64 Space = SWAR_HASZERO(Word ^ (SWAR_ONES * ' '));
+    u64 Tab = SWAR_HASZERO(Word ^ (SWAR_ONES * '\t'));
+    u64 LineFeed = SWAR_HASZERO(Word ^ (SWAR_ONES * '\n'));
+    u64 Carriage = SWAR_HASZERO(Word ^ (SWAR_ONES * '\r'));
+    return((Space | Tab | LineFeed | Carriage) & SWAR_HIGH);
+}
+
+internal u32
+FirstNonIdentifierByte(u64 Mask)
+{
+    u32 Result = 8;
+    for(u32 Index = 0; Index < 8; ++Index)
+    {
+        if((~Mask & SWAR_HIGH) & ((u64)0x80 << (8 * Index)))
+        {
+            Result = Index;
+            break;
         }
     }
-    return TK_EMPTY;
+    return(Result);
 }
 
-static const char *keyword_name(Token token)
+internal void
+AdvanceWhitespaceWord(lexer_cursor *Cursor, u64 LineFeedMask)
 {
-    return keywords[token.tok_type].name;
+    u32 LineFeeds = 0;
+    u32 LastLineFeed = 8;
+    for(u32 Index = 0; Index < 8; ++Index)
+    {
+        if(LineFeedMask & ((u64)0x80 << (8 * Index)))
+        {
+            ++LineFeeds;
+            LastLineFeed = Index;
+        }
+    }
+
+    if(LineFeeds)
+    {
+        Cursor->Line += LineFeeds;
+        Cursor->Column = 7 - LastLineFeed;
+    }
+    else
+    {
+        Cursor->Column += 8;
+    }
+    Cursor->At += 8;
 }
 
-const char *token_to_string(Token tok)
+internal void
+SkipIdentifierRun(lexer_cursor *Cursor)
 {
-    switch (tok.tok_type) {
-    case TK_EOF:
-    case TK_EMPTY:
-        return "";
+    while((u64)(Cursor->End - Cursor->At) >= 8)
+    {
+        u64 Word = LoadU64(Cursor->At);
+        u64 Mask = IdentifierCharMask(Word);
+        if(Mask != SWAR_HIGH)
+        {
+            u32 Count = FirstNonIdentifierByte(Mask);
+            Cursor->At += Count;
+            Cursor->Column += Count;
+            return;
+        }
+        Cursor->At += 8;
+        Cursor->Column += 8;
+    }
 
-    case TK_ILLEGAL:
-    case TK_COMMENT:
-    case TK_STRING:
-    case TK_NAME:
-        return tok.info.str ? tok.info.str : "";
+    while((Cursor->At < Cursor->End) && IsIdentChar(*Cursor->At))
+    {
+        AdvanceCursor(Cursor, 1);
+    }
+}
 
-    case TK_NUMBER:
-        return "[NUMBER]";
-    case TK_AND:
-    case TK_BREAK:
-    case TK_DO:
-    case TK_ELSE:
-    case TK_ELSEIF:
-    case TK_END:
-    case TK_FALSE:
-    case TK_FOR:
-    case TK_FUNCTION:
-    case TK_IF:
-    case TK_IN:
-    case TK_LOCAL:
-    case TK_NIL:
-    case TK_NOT:
-    case TK_OR:
-    case TK_REPEAT:
-    case TK_RETURN:
-    case TK_THEN:
-    case TK_TRUE:
-    case TK_UNTIL:
-    case TK_WHILE:
-        return keyword_name(tok);
+internal b32
+IsAlpha(char C)
+{
+    b32 Result = ((C >= 'a') && (C <= 'z')) || ((C >= 'A') && (C <= 'Z'));
+    return(Result);
+}
 
-    case TK_COMMA:
-        return ",";
-    case TK_HASH:
-        return "#";
-    case TK_LPAREN:
-        return "(";
-    case TK_RPAREN:
-        return ")";
-    case TK_LBRACE:
-        return "{";
-    case TK_RBRACE:
-        return "}";
-    case TK_LBRACKET:
-        return "[";
-    case TK_RBRACKET:
-        return "]";
-    case TK_SEMICOLON:
-        return ";";
-    case TK_EQ:
-        return "=";
-    case TK_EQ_EQ:
-        return "==";
-    case TK_NEQ:
-        return "~=";
-    case TK_BANG:
-        return "!";
-    case TK_GT:
-        return ">";
-    case TK_GT_EQ:
-        return ">=";
-    case TK_LT:
-        return "<";
-    case TK_LT_EQ:
-        return "<=";
-    case TK_ADD:
-        return "+";
-    case TK_SUB:
-        return "-";
-    case TK_MUL:
-        return "*";
-    case TK_DIV:
-        return "/";
+internal b32
+IsDigit(char C)
+{
+    b32 Result = ((C >= '0') && (C <= '9'));
+    return(Result);
+}
+
+internal b32
+IsWhitespace(char C)
+{
+    b32 Result = ((C == ' ') || (C == '\t') || (C == '\n') || (C == '\r'));
+    return(Result);
+}
+
+internal b32
+IsIdentStart(char C)
+{
+    b32 Result = (IsAlpha(C) || (C == '_'));
+    return(Result);
+}
+
+internal b32
+IsIdentChar(char C)
+{
+    b32 Result = (IsAlpha(C) || IsDigit(C) || (C == '_'));
+    return(Result);
+}
+
+global_variable const KeywordEntry GlobalKeywords[] =
+    {
+        {TK_AND, "and"},           {TK_BREAK, "break"},   {TK_DO, "do"},
+        {TK_ELSE, "else"},         {TK_ELSEIF, "elseif"}, {TK_END, "end"},
+        {TK_FALSE, "false"},       {TK_FOR, "for"},       {TK_FUNCTION, "function"},
+        {TK_IF, "if"},             {TK_IN, "in"},         {TK_LOCAL, "local"},
+        {TK_NIL, "nil"},           {TK_NOT, "not"},       {TK_OR, "or"},
+        {TK_REPEAT, "repeat"},     {TK_RETURN, "return"}, {TK_THEN, "then"},
+        {TK_TRUE, "true"},         {TK_UNTIL, "until"},   {TK_WHILE, "while"},
     };
 
-    return "";
-}
-
-static char peek_next_char(LexerState *lex_state)
+internal ReservedToken
+LookupKeyword(const char *Start, u32 Length)
 {
-    size_t location = lex_state->fbuffer->location;
-    if (location >= lex_state->fbuffer->fsize) {
-        return EOF;
-    }
-    return lex_state->fbuffer->buffer[location];
-}
-
-static char get_next_char(LexerState *lex_state)
-{
-    char c = peek_next_char(lex_state);
-    if (c == EOF) {
-        return EOF;
-    }
-    lex_state->fbuffer->location++;
-    if (c == '\n') {
-        lex_state->linenumber++;
-        lex_state->colnumber = 0;
-    } else {
-        lex_state->colnumber++;
-    }
-    return c;
-}
-
-static void skip_whitespace(LexerState *lex_state)
-{
-    while (is_blank(peek_next_char(lex_state))) {
-        get_next_char(lex_state);
-    }
-}
-
-Token make_identifier_token(Token token, LexerState *lex_state)
-{
-    // TODO: set max identifier name limit
-    // right now the hard limit is 63 chars
-    char lname[64];
-    int idx = 0;
-    while (idx < 63 && is_identifier(peek_next_char(lex_state))) {
-        lname[idx] = get_next_char(lex_state);
-        idx++;
-    }
-    lname[idx] = '\0'; // mark end of string
-    ReservedToken kw = keyword_type(lname);
-    if (kw != TK_EMPTY) {
-        token.tok_type = kw;
-        return token;
-    }
-
-    token.info.str = strdup(lname);
-    token.tok_type = TK_NAME;
-    return token;
-}
-
-Token make_number_token(Token token, LexerState *lex_state)
-{
-    char lname[64] = "";
-    int idx = 0;
-    while (is_digit(peek_next_char(lex_state)) ||
-           peek_next_char(lex_state) == '.') {
-        lname[idx] = get_next_char(lex_state);
-        idx++;
-    }
-    lname[idx] = '\0'; // mark end of string
-    token.info.number = atof(lname);
-    token.tok_type = TK_NUMBER;
-    return token;
-}
-
-Token make_string_token(Token token, LexerState *lex_state)
-{
-    get_next_char(lex_state); // Consume opening quote
-
-    char lname[200];
-    int idx = 0;
-
-    while (peek_next_char(lex_state) != '"' &&
-           peek_next_char(lex_state) != EOF) {
-        if (idx < (int)sizeof(lname) - 2) {
-            lname[idx++] = get_next_char(lex_state);
-        } else {
-            // String too long; consume rest or handle error
-            get_next_char(lex_state);
+    ReservedToken Result = TK_EMPTY;
+    u64 Needle = LoadPaddedU64(Start, Length);
+    for(u32 Index = 0; Index < ArrayCount(GlobalKeywords); ++Index)
+    {
+        const KeywordEntry *Entry = GlobalKeywords + Index;
+        if(((u32)strlen(Entry->name) == Length) &&
+            (LoadPaddedU64(Entry->name, Length) == Needle))
+        {
+            Result = Entry->type;
+            break;
         }
     }
-
-    if (peek_next_char(lex_state) == '"') {
-        get_next_char(lex_state); // Consume closing quote
-    } else {
-        token.tok_type = TK_ILLEGAL;
-        return token;
-    }
-
-    lname[idx] = '\0';
-    token.info.str = strdup(lname);
-    token.tok_type = TK_STRING;
-    return token;
+    return(Result);
 }
 
-Token make_comment_token(Token token, LexerState *lex_state)
+internal const char *
+KeywordString(ReservedToken Type)
 {
-    char lname[200] = {'-', '-'};
-    int idx = 0;
-    get_next_char(lex_state);
-    while (peek_next_char(lex_state) != '\n') {
-        lname[idx] = get_next_char(lex_state);
-        idx++;
-    }
-    lname[idx] = '\0';
-    token.info.str = strdup(lname);
-    token.tok_type = TK_COMMENT;
-    return token;
-}
-
-// This will actually give you the token
-Token lnext_token(LexerState *lex_state)
-{
-    Token token = {};
-    token.tok_type = TK_ILLEGAL;
-    token.info.str = NULL;
-
-    skip_whitespace(lex_state);
-
-    token.line = lex_state->linenumber;
-    token.column = lex_state->colnumber;
-
-    if (peek_next_char(lex_state) == EOF) {
-        token.tok_type = TK_EOF;
-        return token;
-    }
-
-    char c = peek_next_char(lex_state);
-    if (is_identifier(c) || c == '"') {
-        if (is_identifier_start(c)) {
-            return make_identifier_token(token, lex_state);
-        } else if (is_digit(c)) {
-            return make_number_token(token, lex_state);
-        } else if (c == '"') {
-            return make_string_token(token, lex_state);
+    const char *Result = "";
+    for(u32 Index = 0; Index < ArrayCount(GlobalKeywords); ++Index)
+    {
+        if(GlobalKeywords[Index].type == Type)
+        {
+            Result = GlobalKeywords[Index].name;
+            break;
         }
     }
-
-    // clang-format off
-    int called_get_next = 0;
-    switch (peek_next_char(lex_state)) {
-        case ',': { token.tok_type = TK_COMMA; } break;
-        case '#': { token.tok_type = TK_HASH; } break;
-        case '(': { token.tok_type = TK_LPAREN; } break;
-        case ')': { token.tok_type = TK_RPAREN; } break;
-        case '{': { token.tok_type = TK_LBRACE; } break;
-        case '}': { token.tok_type = TK_RBRACE; } break;
-        case '[': { token.tok_type = TK_LBRACKET; } break;
-        case ']': { token.tok_type = TK_RBRACKET; } break;
-        case ';': { token.tok_type = TK_SEMICOLON; } break;
-        case '=': { 
-            get_next_char(lex_state);
-            called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
-                token.tok_type = TK_EQ_EQ;
-            } else {
-                token.tok_type = TK_EQ;
-            }
-        } break;
-        case '~': { 
-            get_next_char(lex_state);
-            called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
-                token.tok_type = TK_NEQ;
-            }
-        } break;
-        case '!': { token.tok_type = TK_BANG; } break;
-        case '>': { 
-            get_next_char(lex_state);
-            called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
-                token.tok_type = TK_GT_EQ;
-            } else {
-                token.tok_type = TK_GT;
-            }
-        } break;
-        case '<': { 
-            get_next_char(lex_state);
-            called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
-                token.tok_type = TK_LT_EQ;
-            } else {
-                token.tok_type = TK_LT;
-            }
-        } break;
-        case '+': { token.tok_type = TK_ADD; } break;
-        case '-': { 
-            get_next_char(lex_state);
-            called_get_next = 1;
-            if(peek_next_char(lex_state) == '-') {
-                get_next_char(lex_state);
-                return make_comment_token(token, lex_state);
-            } else {
-                token.tok_type = TK_SUB;
-            }
-        } break;
-        case '*': { token.tok_type = TK_MUL; } break;
-        case '/': { token.tok_type = TK_DIV; } break;
-    };
-
-    if(called_get_next == 0) {
-        get_next_char(lex_state);
-    }
-    return token;
+    return(Result);
 }
 
-void free_token(Token *token) {
-    if(token->tok_type == TK_NAME || token->tok_type == TK_COMMENT || token->tok_type == TK_STRING) {
-        if(token->info.str != NULL) {
-            free((void*)token->info.str);
-            token->info.str = NULL;
+internal void
+AdvanceCursor(lexer_cursor *Cursor, u32 Count)
+{
+    for(u32 Index = 0; (Index < Count) && (Cursor->At < Cursor->End); ++Index)
+    {
+        char C = *Cursor->At++;
+        if(C == '\n')
+        {
+            Cursor->Line++;
+            Cursor->Column = 0;
+        }
+        else
+    {
+            Cursor->Column++;
         }
     }
 }
 
-Token lpeek_next(LexerState *lex_state)
+internal void
+SkipWhitespace(lexer_cursor *Cursor)
 {
-    if (lex_state->lookahead.tok_type != TK_EMPTY) {
-        return lex_state->lookahead;
+    while((u64)(Cursor->End - Cursor->At) >= 8)
+    {
+        u64 Word = LoadU64(Cursor->At);
+        if(WhitespaceMask(Word) != SWAR_HIGH)
+        {
+            break;
+        }
+        AdvanceWhitespaceWord(Cursor, SWAR_HASZERO(Word ^ (SWAR_ONES * '\n')));
     }
 
-    lex_state->lookahead = lnext_token(lex_state);
-    return lex_state->lookahead;
-}
-
-Token lconsume(LexerState *lex_state)
-{
-    lex_state->lastline = lex_state->linenumber;
-    if(lex_state->lookahead.tok_type != TK_EMPTY) {
-        lex_state->tok = lex_state->lookahead;
-        lex_state->lookahead.tok_type = TK_EMPTY;
-        lex_state->lookahead.info.str = NULL;
-    } else {
-        lex_state->tok = lnext_token(lex_state);
-    }
-    return lex_state->tok;
-}
-
-LexerState *init_lexer(const char *filename)
-{
-    LexerState *lex_state = (LexerState *)malloc(sizeof(LexerState));
-    FileBuffer *fbuffer = (FileBuffer *)malloc(sizeof(FileBuffer));
-    FILE *f = fopen(filename, "rb");
-    assert(f != NULL);
-
-    char *buffer;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    assert(size >= 0);
-
-    fbuffer->fsize = (size_t)size;
-    fbuffer->location = 0;
-    buffer = (char *)malloc(fbuffer->fsize + 1);
-    if (buffer) {
-        fread(buffer, 1, fbuffer->fsize, f);
-    }
-    fclose(f);
-
-    buffer[size] = '\0'; // Null terminator
-    fbuffer->buffer = buffer;
-
-    // set everything to 0
-    lex_state->linenumber = 0;
-    lex_state->lastline = 0;
-    lex_state->colnumber = 0;
-    lex_state->tok = (Token){};
-    lex_state->tok.tok_type = TK_EMPTY;
-    lex_state->lookahead = (Token){};
-    lex_state->lookahead.tok_type = TK_EMPTY;
-
-    // set filename
-    lex_state->fbuffer = fbuffer;
-    lex_state->filename = filename;
-
-    return lex_state;
-}
-
-#ifdef PARSER_DEBUG
-void print_token(ReservedToken tok)
-{
-    switch (tok) {
-    /* Keywords */
-    case TK_AND:
-        printf("and");
-        break;
-    case TK_BREAK:
-        printf("break");
-        break;
-    case TK_DO:
-        printf("do");
-        break;
-    case TK_ELSE:
-        printf("else");
-        break;
-    case TK_ELSEIF:
-        printf("elseif");
-        break;
-    case TK_END:
-        printf("end");
-        break;
-    case TK_FALSE:
-        printf("false");
-        break;
-    case TK_FOR:
-        printf("for");
-        break;
-    case TK_FUNCTION:
-        printf("function");
-        break;
-    case TK_IF:
-        printf("if");
-        break;
-    case TK_IN:
-        printf("in");
-        break;
-    case TK_LOCAL:
-        printf("local");
-        break;
-    case TK_NIL:
-        printf("nil");
-        break;
-    case TK_NOT:
-        printf("not");
-        break;
-    case TK_OR:
-        printf("or");
-        break;
-    case TK_REPEAT:
-        printf("repeat");
-        break;
-    case TK_RETURN:
-        printf("return");
-        break;
-    case TK_THEN:
-        printf("then");
-        break;
-    case TK_TRUE:
-        printf("true");
-        break;
-    case TK_UNTIL:
-        printf("until");
-        break;
-    case TK_WHILE:
-        printf("while");
-        break;
-
-    /* Symbols */
-    case TK_COMMA:
-        printf(",");
-        break;
-    case TK_HASH:
-        printf("#");
-        break;
-    case TK_LPAREN:
-        printf("(");
-        break;
-    case TK_RPAREN:
-        printf(")");
-        break;
-    case TK_LBRACE:
-        printf("{");
-        break;
-    case TK_RBRACE:
-        printf("}");
-        break;
-    case TK_LBRACKET:
-        printf("[");
-        break;
-    case TK_RBRACKET:
-        printf("]");
-        break;
-    case TK_SEMICOLON:
-        printf(";");
-        break;
-    case TK_EQ:
-        printf("=");
-        break;
-    case TK_EQ_EQ:
-        printf("==");
-        break;
-    case TK_NEQ:
-        printf("~=");
-        break;
-    case TK_BANG:
-        printf("!");
-        break;
-    case TK_GT:
-        printf(">");
-        break;
-    case TK_GT_EQ:
-        printf(">=");
-        break;
-    case TK_LT:
-        printf("<");
-        break;
-    case TK_LT_EQ:
-        printf("<=");
-        break;
-    case TK_ADD:
-        printf("+");
-        break;
-    case TK_SUB:
-        printf("-");
-        break;
-    case TK_MUL:
-        printf("*");
-        break;
-    case TK_DIV:
-        printf("/");
-        break;
-
-    /* Types & Special */
-    case TK_NUMBER:
-        printf("<number>");
-        break;
-    case TK_STRING:
-        printf("<string>");
-        break;
-    case TK_NAME:
-        printf("<name>");
-        break;
-    case TK_ILLEGAL:
-        printf("<illegal>");
-        break;
-    case TK_EOF:
-        printf("<eof>");
-        break;
-    case TK_EMPTY:
-        printf("<empty>");
-        break;
-    case TK_COMMENT:
-        printf("<comment>");
-        break;
-    default:
-        printf("?");
-        break;
+    while((Cursor->At < Cursor->End) && IsWhitespace(*Cursor->At))
+    {
+        AdvanceCursor(Cursor, 1);
     }
 }
 
-#endif // PARSER_DEBUG
+internal char *
+CopySliceToCString(lexer_cursor *Cursor, const char *Start, u32 Length)
+{
+    Assert(Cursor->Arena);
+    char *Result = PushArray(Cursor->Arena, Length + 1, char);
+    memcpy(Result, Start, Length);
+    Result[Length] = 0;
+    return(Result);
+}
+
+Token
+ScanNextToken(lexer_cursor *Cursor)
+{
+    SkipWhitespace(Cursor);
+
+    Token Result = {0};
+    Result.tok_type = TK_ILLEGAL;
+    Result.line = Cursor->Line;
+    Result.column = Cursor->Column;
+
+    if(Cursor->At >= Cursor->End)
+    {
+        Result.tok_type = TK_EOF;
+        return(Result);
+    }
+
+    char C = Cursor->At[0];
+
+    if(IsIdentStart(C))
+    {
+        const char *Start = Cursor->At;
+        SkipIdentifierRun(Cursor);
+        u32 Length = (u32)(Cursor->At - Start);
+        ReservedToken Keyword = LookupKeyword(Start, Length);
+        if(Keyword != TK_EMPTY)
+        {
+            Result.tok_type = Keyword;
+        }
+        else
+    {
+            Result.tok_type = TK_NAME;
+            Result.info.str = CopySliceToCString(Cursor, Start, Length);
+        }
+        return(Result);
+    }
+
+    if(IsDigit(C))
+    {
+        /* Accumulate directly. No fixed-size buffer and no atof on a slice. */
+        f64 Number = 0;
+        while((Cursor->At < Cursor->End) && IsDigit(*Cursor->At))
+        {
+            Number = Number * 10 + (f64)(*Cursor->At - '0');
+            AdvanceCursor(Cursor, 1);
+        }
+
+        if((Cursor->At < Cursor->End) && (*Cursor->At == '.'))
+        {
+            AdvanceCursor(Cursor, 1);
+            f64 Scale = 10;
+            while((Cursor->At < Cursor->End) && IsDigit(*Cursor->At))
+            {
+                Number += (f64)(*Cursor->At - '0') / Scale;
+                Scale *= 10;
+                AdvanceCursor(Cursor, 1);
+            }
+        }
+
+        Result.tok_type = TK_NUMBER;
+        Result.info.num = Number;
+        return(Result);
+    }
+
+    if(C == '"')
+    {
+        AdvanceCursor(Cursor, 1); // Opening quote
+        const char *Start = Cursor->At;
+        while((Cursor->At < Cursor->End) && (*Cursor->At != '"'))
+        {
+            AdvanceCursor(Cursor, 1);
+        }
+
+        if((Cursor->At < Cursor->End) && (*Cursor->At == '"'))
+        {
+            u32 Length = (u32)(Cursor->At - Start);
+            Result.tok_type = TK_STRING;
+            Result.info.str = CopySliceToCString(Cursor, Start, Length);
+            AdvanceCursor(Cursor, 1); // Closing quote
+        }
+        else
+    {
+            Result.tok_type = TK_ILLEGAL;
+        }
+        return(Result);
+    }
+
+    switch(C)
+    {
+        case ',': { Result.tok_type = TK_COMMA;     AdvanceCursor(Cursor, 1); } break;
+        case '#': { Result.tok_type = TK_HASH;      AdvanceCursor(Cursor, 1); } break;
+        case '(': { Result.tok_type = TK_LPAREN;    AdvanceCursor(Cursor, 1); } break;
+        case ')': { Result.tok_type = TK_RPAREN;    AdvanceCursor(Cursor, 1); } break;
+        case '{': { Result.tok_type = TK_LBRACE;    AdvanceCursor(Cursor, 1); } break;
+        case '}': { Result.tok_type = TK_RBRACE;    AdvanceCursor(Cursor, 1); } break;
+        case '[': { Result.tok_type = TK_LBRACKET;  AdvanceCursor(Cursor, 1); } break;
+        case ']': { Result.tok_type = TK_RBRACKET;  AdvanceCursor(Cursor, 1); } break;
+        case ';': { Result.tok_type = TK_SEMICOLON; AdvanceCursor(Cursor, 1); } break;
+        case '!': { Result.tok_type = TK_BANG;      AdvanceCursor(Cursor, 1); } break;
+        case '+': { Result.tok_type = TK_ADD;       AdvanceCursor(Cursor, 1); } break;
+        case '*': { Result.tok_type = TK_MUL;       AdvanceCursor(Cursor, 1); } break;
+        case '/': { Result.tok_type = TK_DIV;       AdvanceCursor(Cursor, 1); } break;
+
+        case '=':
+            {
+                if(((Cursor->At + 1) < Cursor->End) && (Cursor->At[1] == '='))
+                {
+                    Result.tok_type = TK_EQ_EQ;
+                    AdvanceCursor(Cursor, 2);
+                }
+                else
+            {
+                    Result.tok_type = TK_EQ;
+                    AdvanceCursor(Cursor, 1);
+                }
+            } break;
+
+        case '~':
+            {
+                if(((Cursor->At + 1) < Cursor->End) && (Cursor->At[1] == '='))
+                {
+                    Result.tok_type = TK_NEQ;
+                    AdvanceCursor(Cursor, 2);
+                }
+                else
+            {
+                    AdvanceCursor(Cursor, 1);
+                }
+            } break;
+
+        case '>':
+            {
+                if(((Cursor->At + 1) < Cursor->End) && (Cursor->At[1] == '='))
+                {
+                    Result.tok_type = TK_GT_EQ;
+                    AdvanceCursor(Cursor, 2);
+                }
+                else
+            {
+                    Result.tok_type = TK_GT;
+                    AdvanceCursor(Cursor, 1);
+                }
+            } break;
+
+        case '<':
+            {
+                if(((Cursor->At + 1) < Cursor->End) && (Cursor->At[1] == '='))
+                {
+                    Result.tok_type = TK_LT_EQ;
+                    AdvanceCursor(Cursor, 2);
+                }
+                else
+            {
+                    Result.tok_type = TK_LT;
+                    AdvanceCursor(Cursor, 1);
+                }
+            } break;
+
+        case '-':
+            {
+                if(((Cursor->At + 1) < Cursor->End) && (Cursor->At[1] == '-'))
+                {
+                    AdvanceCursor(Cursor, 2);
+                    const char *Start = Cursor->At;
+                    while((Cursor->At < Cursor->End) && (*Cursor->At != '\n'))
+                    {
+                        AdvanceCursor(Cursor, 1);
+                    }
+                    u32 Length = (u32)(Cursor->At - Start);
+                    Result.tok_type = TK_COMMENT;
+                    Result.info.str = CopySliceToCString(Cursor, Start, Length);
+                }
+                else
+            {
+                    Result.tok_type = TK_SUB;
+                    AdvanceCursor(Cursor, 1);
+                }
+            } break;
+
+        default:
+            {
+                AdvanceCursor(Cursor, 1);
+            } break;
+    }
+
+    return(Result);
+}
+
+const char *
+token_to_string(Token Tok)
+{
+    switch(Tok.tok_type)
+    {
+        case TK_EOF:
+        case TK_EMPTY:   return("");
+
+        case TK_ILLEGAL:
+        case TK_COMMENT:
+        case TK_STRING:
+        case TK_NAME:    return(Tok.info.str ? Tok.info.str : "");
+
+        case TK_NUMBER:  return("[NUMBER]");
+
+        case TK_AND: case TK_BREAK: case TK_DO: case TK_ELSE: case TK_ELSEIF:
+        case TK_END: case TK_FALSE: case TK_FOR: case TK_FUNCTION: case TK_IF:
+        case TK_IN: case TK_LOCAL: case TK_NIL: case TK_NOT: case TK_OR:
+        case TK_REPEAT: case TK_RETURN: case TK_THEN: case TK_TRUE:
+        case TK_UNTIL: case TK_WHILE: return(KeywordString(Tok.tok_type));
+
+        case TK_COMMA:     return(",");
+        case TK_HASH:      return("#");
+        case TK_LPAREN:    return("(");
+        case TK_RPAREN:    return(")");
+        case TK_LBRACE:    return("{");
+        case TK_RBRACE:    return("}");
+        case TK_LBRACKET:  return("[");
+        case TK_RBRACKET:  return("]");
+        case TK_SEMICOLON: return(";");
+        case TK_EQ:        return("=");
+        case TK_EQ_EQ:     return("==");
+        case TK_NEQ:       return("~=");
+        case TK_BANG:      return("!");
+        case TK_GT:        return(">");
+        case TK_GT_EQ:     return(">=");
+        case TK_LT:        return("<");
+        case TK_LT_EQ:     return("<=");
+        case TK_ADD:       return("+");
+        case TK_SUB:       return("-");
+        case TK_MUL:       return("*");
+        case TK_DIV:       return("/");
+
+            InvalidDefaultCase;
+    }
+
+    return("");
+}
+
+void
+InitLexer(LexState *LexState, memory_arena *Arena, source_file *Source)
+{
+    ZeroStruct(*LexState);
+    LexState->Cursor.Base = Source->Data;
+    LexState->Cursor.At = Source->Data;
+    LexState->Cursor.End = Source->Data + Source->Size;
+    LexState->Cursor.Arena = Arena;
+    LexState->Lookahead.tok_type = TK_EMPTY;
+}
+
+Token
+lconsume(LexState *LexState)
+{
+    Token Result = {};
+    if(LexState->HasLookahead)
+    {
+        Result = LexState->Lookahead;
+        LexState->Lookahead = (Token){0};
+        LexState->HasLookahead = 0;
+    }
+    else
+{
+        Result = ScanNextToken(&LexState->Cursor);
+    }
+    LexState->Curr = Result;
+    return(Result);
+}
+
+Token
+lpeek_next(LexState *LexState)
+{
+    if(!LexState->HasLookahead)
+    {
+        LexState->Lookahead = ScanNextToken(&LexState->Cursor);
+        LexState->HasLookahead = 1;
+    }
+    return(LexState->Lookahead);
+}

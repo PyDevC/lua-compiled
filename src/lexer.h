@@ -1,30 +1,27 @@
-#pragma once
+/* ========================================================================
 
-#include <stddef.h>
-#include <stdio.h>
+   $File: lexer.h
+   $Date: 2026/11/20
+   $Revision: 1
 
-/* FileBuffer loads the entire file into the buffer with file info */
-typedef struct
-{
-    FILE *f;
-    const char *buffer;
-    size_t fsize;    /* file length */
-    size_t location; /* buffer index from where to read */
-} FileBuffer;
+   ReservedToken / Token / KeywordEntry keep their original names so the
+   grammar notes in Grammar/ still line up with the code. Only the state
+   object changes: the file is already in memory and the cursor walks it.
 
-/*
- * Reserved Symbols and keywords to be used while lexing, the order is not an
- * issue, but don't do any arithemetic with enum since we don't know if the
- * order will change or not.
- */
+   ======================================================================== */
+
+#ifndef LUA_LEXER_H
+#define LUA_LEXER_H
+
+#include "defs.h"
+
 typedef enum {
     TK_ILLEGAL,
     TK_EOF,
     TK_EMPTY,
     TK_COMMENT,
 
-    /*Keywords*/
-    /*Range 4 - 25*/
+    /* Keywords: 4 - 25 */
     TK_AND,
     TK_BREAK,
     TK_DO,
@@ -47,8 +44,7 @@ typedef enum {
     TK_UNTIL,
     TK_WHILE,
 
-    /*Symbols*/
-    /*Range 26 - 46*/
+    /* Symbols: 26 - 47 */
     TK_COMMA,
     TK_HASH,
     TK_LPAREN,
@@ -71,11 +67,12 @@ typedef enum {
     TK_MUL,
     TK_DIV,
 
-    /*Types*/
-    /*Range 47 - 49*/
+    /* Types: 48 - 50 */
     TK_NUMBER,
     TK_STRING,
     TK_NAME,
+
+    TK_COUNT,
 } ReservedToken;
 
 typedef struct KeywordEntry
@@ -84,57 +81,43 @@ typedef struct KeywordEntry
     const char *name;
 } KeywordEntry;
 
-/*
- * Token Information if a number then the number value, and if a string then a
- * string, this supports every ReservedToken as it can be one of them,
- * char* for string is fine but we should add a new string library for string in
- * future.
- */
 typedef union
 {
-    double number;
+    f64 num;
     const char *str;
 } TokenInfo;
 
-/* Token with type and token info */
 typedef struct Token
 {
     ReservedToken tok_type;
     TokenInfo info;
-    size_t line;
-    size_t column;
+    u32 line;
+    u32 column;
 } Token;
 
-/*
- * Lexer State for managing lexing per file scope.
- */
-typedef struct LexerState
+/* The cursor owns no memory. Base/End bound the file, At walks it. */
+typedef struct lexer_cursor
 {
-    FileBuffer *fbuffer;  /* look into file buffer*/
-    Token tok;            /* current token */
-    Token lookahead;      /* lookahead next token */
-    const char *filename; /* file name for particular lexer state */
-    size_t linenumber;    /* current line */
-    size_t colnumber;     /* current column number */
-    size_t lastline;      /* Last line for parsing token */
-} LexerState;
+    char *Base;
+    char *At;
+    char *End;
+    u32 Line;
+    u32 Column;
+    memory_arena *Arena;
+} lexer_cursor;
 
-LexerState *init_lexer(const char *filename);
+typedef struct LexState
+{
+    lexer_cursor Cursor;
+    Token Curr;
+    Token Lookahead;
+    b32 HasLookahead;
+} LexState;
 
-/*
- * Return the lex_state->tok, and consume the lookahead if not consumed
- */
-Token lconsume(LexerState *lex_state);
+void InitLexer(LexState *LexState, memory_arena *Arena, source_file *Source);
+Token ScanNextToken(lexer_cursor *Cursor);
+Token lconsume(LexState *LexState);
+Token lpeek_next(LexState *LexState);
+const char *token_to_string(Token Tok);
 
-/*
- * Return the lookahead token and move forward in buffer
- */
-Token lpeek_next(LexerState *lex_state);
-const char *token_to_string(Token token);
-
-#ifdef PARSER_DEBUG
-/*
- * Print the reserved token type as chars
- */
-void print_token(ReservedToken tok_type);
-#endif // PARSER_DEBUG
+#endif /* LUA_LEXER_H */

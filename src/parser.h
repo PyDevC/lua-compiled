@@ -1,51 +1,62 @@
-#pragma once
+/* ========================================================================
 
-#include "allocator.h"
+   $File: parser.h
+   $Date: 2026/11/20
+   $Revision: 1
+
+   A Pratt (top-down operator precedence) parser. The rule table is indexed
+   by ReservedToken, the same way the sim86 decoder in Computer Enhance
+   indexes its instruction formats: no recursive precedence functions, just
+   data saying "this token has a prefix parser, an infix parser, and a
+   binding power".
+
+   ======================================================================== */
+
+#ifndef LUA_PARSER_H
+#define LUA_PARSER_H
+
 #include "last.h"
 #include "lexer.h"
 
-#define u32 uint32_t
-
 typedef enum {
     PREC_NONE,
-    PREC_ASSIGN,  // =
-    PREC_OR,      // or
-    PREC_AND,     // and
-    PREC_COMPARE, // < > <= >= == ~=
-    PREC_TERM,    // + -
-    PREC_FACTOR,  // % * /
-    PREC_CALL,    // func()
-    PREC_UNARY,   // not #
-    PREC_POWER,   // ^
-    PREC_PRIMARY
+    PREC_ASSIGN,  /* = (not an expression operator) */
+    PREC_OR,      /* or */
+    PREC_AND,     /* and */
+    PREC_COMPARE, /* < > <= >= == ~= */
+    PREC_TERM,    /* + - */
+    PREC_FACTOR,  /* * / */
+    PREC_UNARY,   /* not - # */
+    PREC_CALL,    /* f() */
+    PREC_PRIMARY,
 } Precedence;
 
 typedef struct Parser
 {
-    Token current;
-    Token previous;
-    LexerState *lex_state;
-    Expr *expr_pool;
-    Statement *stmt_pool;
-    u32 expr_capacity;
-    u32 expr_len;
-    u32 stmt_capacity;
-    u32 stmt_len;
+    Token Curr;
+    LexState LexState;
+    source_file *Source;
+    memory_arena *Arena;
+
+    Expr *ExprPool;
+    u32 ExprCap;
+    u32 ExprLen;
+
+    Statement *StmtPool;
+    u32 StmtCap;
+    u32 StmtLen;
+
+    b32 HadError;
 } Parser;
 
-Parser *init_parser(const char *name);
-void destory_parser(Parser *parser);
-void p_advance(Parser *parser);
-int p_match(Parser *parser, ReservedToken tok_type);
+void InitParser(Parser *Parser, memory_arena *Arena, source_file *Source);
+ASTIndex ParseChunk(Parser *Parser);
+b32 ParserOK(Parser *Parser);
 
-ASTIndex parse_expression(Parser *parser, Precedence prec);
-ASTIndex parse_statement(Parser *parser);
-ASTIndex parse_block(Parser *parser);
+Expr *GetExpr(Parser *Parser, ASTIndex Index);
+Statement *GetStatement(Parser *Parser, ASTIndex Index);
 
-Statement *get_statement(Parser *parser, ASTIndex stmt);
-Expr *get_expression(Parser *parser, ASTIndex expr);
+void DumpExpr(Parser *Parser, ASTIndex Index);
+void DumpStatement(Parser *Parser, ASTIndex Index);
 
-#ifdef PARSER_DEBUG
-void print_expression(Parser *parser, Expr *expr);
-void print_statement(Parser *parser, Statement *stmt);
-#endif // PARSER_DEBUG
+#endif /* LUA_PARSER_H */

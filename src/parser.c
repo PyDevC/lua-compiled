@@ -15,6 +15,11 @@
 
 #include <stdarg.h>
 
+/* The AST walkers in later passes are recursive too. Keeping parse depth
+ * bounded here is enough to keep semantic analysis, IR emission and dumps
+ * bounded without adding depth counters to every pass. */
+#define MaxParseDepth 1024
+
 typedef ASTIndex (*PrefixFn)(Parser *, Token);
 typedef ASTIndex (*InfixFn)(Parser *, ASTIndex, Token);
 
@@ -36,7 +41,9 @@ internal ASTIndex ParseBinaryInfix(Parser *P, ASTIndex Left, Token Op);
 internal ASTIndex ParseCallInfix(Parser *P, ASTIndex Left, Token Op);
 
 internal ASTIndex ParseExpression(Parser *P, Precedence MinPrec);
+internal ASTIndex ParseExpressionInternal(Parser *P, Precedence MinPrec);
 internal ASTIndex ParseStatement(Parser *P);
+internal ASTIndex ParseStatementInternal(Parser *P);
 internal ASTIndex ParseBlock(Parser *P);
 
 global_variable const ParserRule Rules[TK_COUNT] =
@@ -174,7 +181,7 @@ GetStatement(Parser *P, ASTIndex Index)
 }
 
 internal ASTIndex
-ParseExpression(Parser *P, Precedence MinPrec)
+ParseExpressionInternal(Parser *P, Precedence MinPrec)
 {
     ASTIndex Result = ASTNone;
     PrefixFn Prefix = Rules[P->Curr.tok_type].Prefix;
@@ -205,6 +212,24 @@ ParseExpression(Parser *P, Precedence MinPrec)
         Advance(P); /* recovery: always make progress */
     }
 
+    return(Result);
+}
+
+internal ASTIndex
+ParseExpression(Parser *P, Precedence MinPrec)
+{
+    if(P->Depth >= MaxParseDepth)
+    {
+        if(!P->Log || (P->Log->List.ErrorCount == P->StartErrorCount))
+        {
+            ErrorAt(P, &P->Curr, "expression nesting too deep");
+        }
+        return(ASTNone);
+    }
+
+    ++P->Depth;
+    ASTIndex Result = ParseExpressionInternal(P, MinPrec);
+    --P->Depth;
     return(Result);
 }
 
@@ -645,7 +670,7 @@ ParseReturnStatement(Parser *P)
 }
 
 internal ASTIndex
-ParseStatement(Parser *P)
+ParseStatementInternal(Parser *P)
 {
     Token Start = P->Curr;
     ASTIndex Result = ASTNone;
@@ -684,6 +709,25 @@ ParseStatement(Parser *P)
                 Advance(P);
             } break;
     }
+    return(Result);
+}
+
+internal ASTIndex
+ParseStatement(Parser *P)
+{
+    if(P->Depth >= MaxParseDepth)
+    {
+        ErrorAt(P, &P->Curr, "statement nesting too deep");
+        if(!IsBlockEnd(P->Curr.tok_type))
+        {
+            Advance(P);
+        }
+        return(ASTNone);
+    }
+
+    ++P->Depth;
+    ASTIndex Result = ParseStatementInternal(P);
+    --P->Depth;
     return(Result);
 }
 

@@ -35,6 +35,10 @@
 #include "ir.c"
 #include "x86.c"
 
+/* Keeps every u32 capacity derived from the source length well below wrap,
+ * and keeps the one-shot compile arena from being absurdly large. */
+#define MaxSourceSize Megabytes(64)
+
 void
 Fatal(char *Format, ...)
 {
@@ -137,50 +141,43 @@ StringsEqual(string A, string B)
     return(Result);
 }
 
-internal u32
-GetFileSize(char *FileName, message_log *Log)
+internal b32
+GetOpenFileSize(FILE *File, char *FileName, u32 *SizeOut, message_log *Log)
 {
-    u32 Result = 0;
-    FILE *File = fopen(FileName, "rb");
-    if(!File)
-    {
-        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
-                    "cannot open '%s'", FileName);
-        return(Result);
-    }
+    b32 Result = 0;
+    *SizeOut = 0;
 
     if(fseek(File, 0, SEEK_END) != 0)
     {
         PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
                     "cannot seek '%s'", FileName);
-        fclose(File);
         return(Result);
     }
 
     long Size = ftell(File);
-    fclose(File);
-    if(Size < 0)
+    if((Size < 0) || (Size > (long)MaxSourceSize))
     {
         PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
-                    "cannot size '%s'", FileName);
+                    (Size < 0) ? "cannot size '%s'" : "input file too large '%s'",
+                    FileName);
+        return(Result);
+    }
+    if(fseek(File, 0, SEEK_SET) != 0)
+    {
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot seek '%s'", FileName);
         return(Result);
     }
 
-    Result = (u32)Size;
+    *SizeOut = (u32)Size;
+    Result = 1;
     return(Result);
 }
 
-source_file
-ReadEntireFile(memory_arena *Arena, char *FileName, u32 Size, message_log *Log)
+internal source_file
+ReadOpenEntireFile(FILE *File, char *FileName, u32 Size, memory_arena *Arena,
+                   message_log *Log)
 {
-    FILE *File = fopen(FileName, "rb");
-    if(!File)
-    {
-        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
-                    "cannot open '%s'", FileName);
-        return(NilSource);
-    }
-
     char *Data = PushArray(Arena, (memory_index)Size + 1, char);
     if(fread(Data, 1, (size_t)Size, File) != (size_t)Size)
     {
@@ -346,6 +343,7 @@ main(int argc, char **argv)
 {
     int ExitCode = 1;
     void *CompileMemory = 0;
+    FILE *Input = 0;
     FILE *Output = 0;
     u8 MessageMemory[MESSAGE_ARENA_SIZE];
     memory_arena LogArena = {0};
@@ -381,8 +379,16 @@ main(int argc, char **argv)
         goto done;
     }
 
-    FileSize = GetFileSize(Params.FileName, &Log);
-    if(MessageLogHasErrors(&Log))
+    /* Keep one descriptor from sizing through reading so the size and the
+     * bytes always come from the same file. */
+    Input = fopen(Params.FileName, "rb");
+    if(!Input)
+    {
+        PushMessage(&Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot open '%s'", Params.FileName);
+        goto done;
+    }
+    if(!GetOpenFileSize(Input, Params.FileName, &FileSize, &Log))
     {
         goto done;
     }
@@ -403,7 +409,9 @@ main(int argc, char **argv)
     {
         Params.AsmFileName = DefaultAsmFileName(&CompileArena, Params.FileName);
     }
-    Source = ReadEntireFile(&CompileArena, Params.FileName, FileSize, &Log);
+    Source = ReadOpenEntireFile(Input, Params.FileName, FileSize,
+                                &CompileArena, &Log);
+    Input = 0; /* ReadOpenEntireFile closes it on every path. */
     if(MessageLogHasErrors(&Log))
     {
         goto done;
@@ -479,17 +487,30 @@ main(int argc, char **argv)
     }
 
     VerbosePrint(Params, "asm: %s\n", Params.AsmFileName);
-    EmitAssembly(Output, &IR, &CompileArena);
+    EmitAssembly(Output, &IR, &CompileArena, &Log);
     EmitEnd = clock();
     VerbosePrint(Params, "emit: %.3f ms\n",
                  1000.0 * (f64)(EmitEnd - IREnd) / (f64)CLOCKS_PER_SEC);
 
+    if(MessageLogHasErrors(&Log))
+    {
+        goto done;
+    }
     ExitCode = 0;
 
 done:
+    if(Input)
+    {
+        fclose(Input);
+    }
     if(Output)
     {
-        fclose(Output);
+        if(fclose(Output) != 0)
+        {
+            PushMessage(&Log, Msg_Error, &NilSource, SourceOffsetNone,
+                        "platform", "cannot close '%s'", Params.AsmFileName);
+            ExitCode = 1;
+        }
     }
     PrintMessages(&Log, stderr);
     free(CompileMemory);

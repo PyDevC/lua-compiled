@@ -86,16 +86,35 @@ PushMessage(message_log *Log, message_kind Kind, source_file *Source,
     va_end(Args);
 }
 
+typedef struct source_position_cache
+{
+    source_file *Source;
+    u32 Offset;
+    u32 Line;
+    u32 Column;
+} source_position_cache;
+
 internal void
-SourcePosition(source_file *Source, u32 Offset, u32 *Line, u32 *Column)
+SourcePosition(source_file *Source, u32 Offset, u32 *Line, u32 *Column,
+               source_position_cache *Cache)
 {
     u32 ResultLine = 1;
     u32 ResultColumn = 1;
+    u32 Start = 0;
     char *Data = Source && Source->Data ? Source->Data : "";
     u32 Size = Source ? Source->Size : 0;
     u32 Limit = Minimum(Offset, Size);
 
-    for(u32 Index = 0; Index < Limit; ++Index)
+    /* Diagnostics are normally appended in source order, so continue the last
+     * scan instead of rescanning from byte zero for every message. */
+    if(Cache && (Cache->Source == Source) && (Cache->Offset <= Limit))
+    {
+        Start = Cache->Offset;
+        ResultLine = Cache->Line;
+        ResultColumn = Cache->Column;
+    }
+
+    for(u32 Index = Start; Index < Limit; ++Index)
     {
         if(Data[Index] == '\n')
         {
@@ -106,6 +125,14 @@ SourcePosition(source_file *Source, u32 Offset, u32 *Line, u32 *Column)
         {
             ++ResultColumn;
         }
+    }
+
+    if(Cache)
+    {
+        Cache->Source = Source;
+        Cache->Offset = Limit;
+        Cache->Line = ResultLine;
+        Cache->Column = ResultColumn;
     }
 
     *Line = ResultLine;
@@ -120,6 +147,7 @@ PrintMessages(message_log *Log, FILE *Stream)
         return;
     }
 
+    source_position_cache PositionCache = {0};
     for(message *Msg = Log->List.First; Msg; Msg = Msg->Next)
     {
         char *Prefix = "note";
@@ -137,7 +165,7 @@ PrintMessages(message_log *Log, FILE *Stream)
         {
             u32 Line = 0;
             u32 Column = 0;
-            SourcePosition(Source, Msg->Offset, &Line, &Column);
+            SourcePosition(Source, Msg->Offset, &Line, &Column, &PositionCache);
             fprintf(Stream, "%s:%u:%u: %s: %s: ", Source->FileName, Line,
                     Column, Prefix, Msg->Origin);
         }

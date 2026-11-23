@@ -903,8 +903,10 @@ EmitStatement(ir_program *IR, ASTIndex Index)
 
                 u32 SavedRegCount = IR->FrameRegCount;
                 u32 SavedFunction = IR->CurrentFunction;
+                u32 SavedLoopCount = IR->LoopCount;
                 IR->FrameRegCount = 0;
                 IR->CurrentFunction = SigIndex;
+                IR->LoopCount = 0;
 
                 EmitStatements(IR, S->as.func_stmt.first_stmt);
 
@@ -929,6 +931,7 @@ EmitStatement(ir_program *IR, ASTIndex Index)
                 PatchInstruction(IR, SkipJump, IR->InstructionCount);
                 IR->FrameRegCount = SavedRegCount;
                 IR->CurrentFunction = SavedFunction;
+                IR->LoopCount = SavedLoopCount;
 
                 u32 FunctionReg = NextReg(IR, 1);
                 lua_type FunctionType = SimpleType(Type_Function);

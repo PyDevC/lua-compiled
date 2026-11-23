@@ -43,10 +43,14 @@ typedef struct asm_emitter
     asm_string *Strings;
     u32 StringCount;
     u32 StringCapacity;
+    u32 *StringSlots;
+    u32 StringSlotCount;
 
     asm_number *Numbers;
     u32 NumberCount;
     u32 NumberCapacity;
+    u32 *NumberSlots;
+    u32 NumberSlotCount;
 
     u32 Unique;
     u32 *FrameSizes;
@@ -62,6 +66,7 @@ typedef struct asm_emitter
     u32 TotalRegs;
 } asm_emitter;
 
-internal void EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena);
+internal void EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena,
+                           message_log *Log);
 
 #endif /* LUA_X86_H */

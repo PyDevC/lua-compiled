@@ -186,7 +186,4 @@ void PushMessage(message_log *Log, message_kind Kind, source_file *Source,
 void PrintMessages(message_log *Log, FILE *Stream);
 b32 MessageLogHasErrors(message_log *Log);
 
-source_file ReadEntireFile(memory_arena *Arena, char *FileName, u32 Size,
-                           message_log *Log);
-
 #endif /* LUA_DEFS_H */

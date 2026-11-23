@@ -19,6 +19,7 @@ import csv
 import json
 import os
 import re
+import shlex
 import shutil
 import statistics
 import subprocess
@@ -861,6 +862,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--json", help="also write full results to this JSON file")
     parser.add_argument("--csv", help="also write summary results to this CSV file")
+    if argv is None:
+        argv = shlex.split(os.environ.get("BENCH_ARGS", ""))
     args = parser.parse_args(argv)
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")

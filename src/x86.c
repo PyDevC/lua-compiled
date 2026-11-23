@@ -17,27 +17,35 @@
 internal void Out(asm_emitter *E, char *Format, ...);
 
 internal void
-EnsureOutSpace(asm_emitter *E, u32 MinimumExtra)
+EnsureOutSpace(asm_emitter *E, u64 MinimumExtra)
 {
-    u32 Need = E->OutUsed + MinimumExtra + 1;
+    u64 Need = (u64)E->OutUsed + MinimumExtra + 1;
+    if(Need > UINT32_MAX)
+    {
+        Fatal("assembly output exceeds 4 GB");
+    }
     if(Need <= E->OutCapacity)
     {
         return;
     }
 
-    u32 NewCapacity = E->OutCapacity ? E->OutCapacity : Kilobytes(64);
+    u64 NewCapacity = E->OutCapacity ? E->OutCapacity : Kilobytes(64);
     while(NewCapacity < Need)
     {
         NewCapacity *= 2;
+        if(NewCapacity > UINT32_MAX)
+        {
+            NewCapacity = UINT32_MAX;
+        }
     }
 
-    char *NewBase = PushArray(E->Arena, NewCapacity, char);
+    char *NewBase = PushArray(E->Arena, (memory_index)NewCapacity, char);
     if(E->OutUsed)
     {
         memcpy(NewBase, E->OutBase, E->OutUsed);
     }
     E->OutBase = NewBase;
-    E->OutCapacity = NewCapacity;
+    E->OutCapacity = (u32)NewCapacity;
 }
 
 internal void
@@ -70,7 +78,7 @@ Out(asm_emitter *E, char *Format, ...)
     }
     else if(Written > 0)
     {
-        EnsureOutSpace(E, (u32)Written + 1);
+        EnsureOutSpace(E, (u64)Written + 1);
         Available = E->OutCapacity - E->OutUsed;
         vsnprintf(E->OutBase + E->OutUsed, Available, Format, Retry);
         E->OutUsed += (u32)Written;
@@ -92,6 +100,159 @@ DoubleBits(f64 Number)
     return(Value.Bits);
 }
 
+internal u32
+PowerOfTwoAtLeast(u32 Value)
+{
+    u32 Result = 16;
+    while(Result < Value)
+    {
+        if(Result > (UINT32_MAX / 2))
+        {
+            Fatal("assembly intern table too large");
+        }
+        Result *= 2;
+    }
+    return(Result);
+}
+
+internal u32
+NextSlot(u32 Slot, u32 SlotCount)
+{
+    return((Slot + 1) & (SlotCount - 1));
+}
+
+internal u64
+HashString(string Value)
+{
+    u64 Result = 14695981039346656037ULL;
+    for(u32 Index = 0; Index < Value.Count; ++Index)
+    {
+        Result = (Result ^ (u8)Value.Data[Index]) * 1099511628211ULL;
+    }
+    return(Result);
+}
+
+internal u64
+HashBits(u64 Value)
+{
+    Value += 0x9e3779b97f4a7c15ULL;
+    Value = (Value ^ (Value >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    Value = (Value ^ (Value >> 27)) * 0x94d049bb133111ebULL;
+    return(Value ^ (Value >> 31));
+}
+
+internal void
+GrowStringSlots(asm_emitter *E, u32 NewCount)
+{
+    u32 *Slots = PushArray(E->Arena, NewCount, u32);
+    ZeroSize((memory_index)NewCount * sizeof(*Slots), Slots);
+
+    for(u32 Index = 0; Index < E->StringCount; ++Index)
+    {
+        u32 Slot = (u32)HashString(E->Strings[Index].Value) & (NewCount - 1);
+        while(Slots[Slot])
+        {
+            Slot = NextSlot(Slot, NewCount);
+        }
+        Slots[Slot] = Index + 1;
+    }
+
+    E->StringSlots = Slots;
+    E->StringSlotCount = NewCount;
+}
+
+internal void
+GrowNumberSlots(asm_emitter *E, u32 NewCount)
+{
+    u32 *Slots = PushArray(E->Arena, NewCount, u32);
+    ZeroSize((memory_index)NewCount * sizeof(*Slots), Slots);
+
+    for(u32 Index = 0; Index < E->NumberCount; ++Index)
+    {
+        u32 Slot = (u32)HashBits(E->Numbers[Index].Bits) & (NewCount - 1);
+        while(Slots[Slot])
+        {
+            Slot = NextSlot(Slot, NewCount);
+        }
+        Slots[Slot] = Index + 1;
+    }
+
+    E->NumberSlots = Slots;
+    E->NumberSlotCount = NewCount;
+}
+
+internal asm_string *
+FindInternedString(asm_emitter *E, string Value)
+{
+    asm_string *Result = 0;
+    if(E->StringSlotCount)
+    {
+        u32 Slot = (u32)HashString(Value) & (E->StringSlotCount - 1);
+        while(E->StringSlots[Slot])
+        {
+            u32 Index = E->StringSlots[Slot] - 1;
+            if(StringsEqual(E->Strings[Index].Value, Value))
+            {
+                Result = E->Strings + Index;
+                break;
+            }
+            Slot = NextSlot(Slot, E->StringSlotCount);
+        }
+    }
+    return(Result);
+}
+
+internal void
+InsertStringSlot(asm_emitter *E, u32 Index)
+{
+    if((E->StringCount + 1) * 2 >= E->StringSlotCount)
+    {
+        GrowStringSlots(E, E->StringSlotCount * 2);
+    }
+    u32 Slot = (u32)HashString(E->Strings[Index].Value) & (E->StringSlotCount - 1);
+    while(E->StringSlots[Slot])
+    {
+        Slot = NextSlot(Slot, E->StringSlotCount);
+    }
+    E->StringSlots[Slot] = Index + 1;
+}
+
+internal asm_number *
+FindInternedNumber(asm_emitter *E, u64 Bits)
+{
+    asm_number *Result = 0;
+    if(E->NumberSlotCount)
+    {
+        u32 Slot = (u32)HashBits(Bits) & (E->NumberSlotCount - 1);
+        while(E->NumberSlots[Slot])
+        {
+            u32 Index = E->NumberSlots[Slot] - 1;
+            if(E->Numbers[Index].Bits == Bits)
+            {
+                Result = E->Numbers + Index;
+                break;
+            }
+            Slot = NextSlot(Slot, E->NumberSlotCount);
+        }
+    }
+    return(Result);
+}
+
+internal void
+InsertNumberSlot(asm_emitter *E, u32 Index)
+{
+    if((E->NumberCount + 1) * 2 >= E->NumberSlotCount)
+    {
+        GrowNumberSlots(E, E->NumberSlotCount * 2);
+    }
+    u32 Slot = (u32)HashBits(E->Numbers[Index].Bits) & (E->NumberSlotCount - 1);
+    while(E->NumberSlots[Slot])
+    {
+        Slot = NextSlot(Slot, E->NumberSlotCount);
+    }
+    E->NumberSlots[Slot] = Index + 1;
+}
+
 internal char *
 NewLabel(asm_emitter *E, char *Prefix)
 {
@@ -103,23 +264,16 @@ NewLabel(asm_emitter *E, char *Prefix)
 internal asm_string *
 InternString(asm_emitter *E, string Value)
 {
-    asm_string *Result = 0;
-    for(u32 Index = 0; Index < E->StringCount; ++Index)
-    {
-        if(StringsEqual(E->Strings[Index].Value, Value))
-        {
-            Result = E->Strings + Index;
-            break;
-        }
-    }
-
+    asm_string *Result = FindInternedString(E, Value);
     if(!Result)
     {
         Assert(E->StringCount < E->StringCapacity);
-        Result = E->Strings + E->StringCount++;
+        u32 Index = E->StringCount++;
+        Result = E->Strings + Index;
         Result->Value = Value;
         Result->DataLabel = PushArray(E->Arena, 32, char);
-        snprintf(Result->DataLabel, 32, ".LC%u", E->StringCount - 1);
+        snprintf(Result->DataLabel, 32, ".LC%u", Index);
+        InsertStringSlot(E, Index);
     }
 
     return(Result);
@@ -141,25 +295,18 @@ internal char *
 InternNumber(asm_emitter *E, f64 Number)
 {
     u64 Bits = DoubleBits(Number);
-    char *Result = 0;
+    asm_number *Entry = FindInternedNumber(E, Bits);
+    char *Result = Entry ? Entry->Label : 0;
 
-    for(u32 Index = 0; Index < E->NumberCount; ++Index)
-    {
-        if(E->Numbers[Index].Bits == Bits)
-        {
-            Result = E->Numbers[Index].Label;
-            break;
-        }
-    }
-
-    if(!Result)
+    if(!Entry)
     {
         Assert(E->NumberCount < E->NumberCapacity);
+        u32 Index = E->NumberCount++;
         Result = PushArray(E->Arena, 32, char);
-        snprintf(Result, 32, ".LN%u", E->NumberCount);
-        E->Numbers[E->NumberCount].Bits = Bits;
-        E->Numbers[E->NumberCount].Label = Result;
-        ++E->NumberCount;
+        snprintf(Result, 32, ".LN%u", Index);
+        E->Numbers[Index].Bits = Bits;
+        E->Numbers[Index].Label = Result;
+        InsertNumberSlot(E, Index);
     }
 
     return(Result);
@@ -1184,7 +1331,7 @@ EmitInstruction(asm_emitter *E, ir_program *IR, u32 Index)
 internal void
 EmitAscii(asm_emitter *E, string Value)
 {
-    EnsureOutSpace(E, Value.Count * 4 + 1);
+    EnsureOutSpace(E, (u64)Value.Count * 4 + 1);
     char *At = E->OutBase + E->OutUsed;
 
     for(u32 Index = 0; Index < Value.Count; ++Index)
@@ -1301,7 +1448,8 @@ EmitCode(asm_emitter *E, ir_program *IR)
 }
 
 internal void
-EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
+EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena,
+             message_log *Log)
 {
     asm_emitter E = {0};
     E.File = File;
@@ -1317,6 +1465,14 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
     E.NumberCapacity = NodeCount * 4;
     E.Strings = PushArray(Arena, E.StringCapacity, asm_string);
     E.Numbers = PushArray(Arena, E.NumberCapacity, asm_number);
+    E.StringSlotCount = PowerOfTwoAtLeast(E.StringCapacity);
+    E.NumberSlotCount = PowerOfTwoAtLeast(E.NumberCapacity);
+    E.StringSlots = PushArray(Arena, E.StringSlotCount, u32);
+    E.NumberSlots = PushArray(Arena, E.NumberSlotCount, u32);
+    ZeroSize((memory_index)E.StringSlotCount * sizeof(*E.StringSlots),
+             E.StringSlots);
+    ZeroSize((memory_index)E.NumberSlotCount * sizeof(*E.NumberSlots),
+             E.NumberSlots);
     E.FrameSizes = PushArray(Arena, IR->FunctionCount, u32);
     E.InstructionCount = IR->InstructionCount;
     E.FunctionEntries = PushArray(Arena, IR->InstructionCount + 1, b32);
@@ -1410,6 +1566,10 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
 
     if(E.OutUsed)
     {
-        fwrite(E.OutBase, 1, E.OutUsed, File);
+        if(fwrite(E.OutBase, 1, E.OutUsed, File) != E.OutUsed)
+        {
+            PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone,
+                        "platform", "cannot write assembly output");
+        }
     }
 }

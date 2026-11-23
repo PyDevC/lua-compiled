@@ -39,6 +39,7 @@ typedef struct Parser
     memory_arena *Arena;
     message_log *Log;
     u32 StartErrorCount;
+    u32 Depth;
 
     Expr *ExprPool;
     u32 ExprCap;

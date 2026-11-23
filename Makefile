@@ -6,6 +6,12 @@ BENCH_ARGS ?=
 
 TESTFILES = assignment expressions controlflow loops function imports smoke big
 
+ifneq ($(filter-out assignment expressions controlflow loops function imports smoke big,$(TESTFILES)),)
+$(error TESTFILES contains an unknown fixture name)
+endif
+
+export BENCH_ARGS
+
 .PHONY: all build debug test clean bench bench-clean
 
 all: build test
@@ -28,7 +34,7 @@ test: build
 	done
 
 bench: build
-	$(MAKE) -C benchmark run BENCH_ARGS="$(BENCH_ARGS)"
+	$(MAKE) -C benchmark run
 
 bench-clean:
 	$(MAKE) -C benchmark clean

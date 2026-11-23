@@ -224,11 +224,18 @@ UnifyExprType(semantic_context *Context, ASTIndex ExprIndex, lua_type Type)
         function_signature *Sig =
             GetFunction(Context,
                         GetExpr(P, E->as.call.callee)->Type.SignatureIndex);
-        if(!UnifyType(&Sig->Return, Type))
+        if(Sig == &NilFunction)
         {
             Result = 0;
         }
-        E->Type = Sig->Return;
+        else
+        {
+            if(!UnifyType(&Sig->Return, Type))
+            {
+                Result = 0;
+            }
+            E->Type = Sig->Return;
+        }
     }
 
     if(!Result)
@@ -752,21 +759,35 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
                     break;
                 }
                 u32 SavedFunction = Context->CurrentFunction;
+                u32 SavedLoopDepth = Context->LoopDepth;
                 Context->CurrentFunction = SigIndex;
+                /* A function body is a new control-flow region. A `break` in a
+                 * function nested in a loop must not patch the outer loop. */
+                Context->LoopDepth = 0;
 
+                b32 DuplicateParam = 0;
                 PushScope(Context);
                 ASTIndex Param = S->as.func_stmt.first_arg;
                 for(u32 ParamIndex = 0; ParamIndex < Sig->ParamCount; ++ParamIndex)
                 {
-                    string Name =
-                        StringFromC((char *)GetExpr(P, Param)->as.variable);
+                    Expr *ParamExpr = GetExpr(P, Param);
+                    string Name = StringFromC((char *)ParamExpr->as.variable);
                     u32 SymbolIndex = DeclareLocal(Context, Name,
                                                    Sig->Params[ParamIndex]);
                     if(ParamIndex == 0)
                     {
                         Sig->FirstParamSymbol = SymbolIndex;
                     }
-                    Param = GetExpr(P, Param)->next;
+                    else if(SymbolIndex != Sig->FirstParamSymbol + ParamIndex)
+                    {
+                        /* DeclareLocal returns the earlier binding for a repeated
+                         * name. Parameters must own consecutive slots because the
+                         * backend addresses them as FirstParamSymbol + index. */
+                        SemanticErrorAt(Context, ParamExpr->Offset,
+                                        "duplicate parameter name '%s'", Name.Data);
+                        DuplicateParam = 1;
+                    }
+                    Param = ParamExpr->next;
                 }
 
                 AnalyzeList(Context, S->as.func_stmt.first_stmt);
@@ -774,7 +795,7 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
                 /* The body constrains parameter types through their symbols.
                  * Copy that result back so later calls are checked against the
                  * body's requirements, not against a stale Unknown. */
-                if(Sig->FirstParamSymbol != SymbolNone)
+                if(!DuplicateParam && (Sig->FirstParamSymbol != SymbolNone))
                 {
                     for(u32 ParamIndex = 0; ParamIndex < Sig->ParamCount;
                         ++ParamIndex)
@@ -791,6 +812,7 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
                 }
                 PopScope(Context);
                 Context->CurrentFunction = SavedFunction;
+                Context->LoopDepth = SavedLoopDepth;
             } break;
 
         case StmtReturn:

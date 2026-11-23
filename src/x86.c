@@ -17,11 +17,66 @@
 internal void Out(asm_emitter *E, char *Format, ...);
 
 internal void
+EnsureOutSpace(asm_emitter *E, u32 MinimumExtra)
+{
+    u32 Need = E->OutUsed + MinimumExtra + 1;
+    if(Need <= E->OutCapacity)
+    {
+        return;
+    }
+
+    u32 NewCapacity = E->OutCapacity ? E->OutCapacity : Kilobytes(64);
+    while(NewCapacity < Need)
+    {
+        NewCapacity *= 2;
+    }
+
+    char *NewBase = PushArray(E->Arena, NewCapacity, char);
+    if(E->OutUsed)
+    {
+        memcpy(NewBase, E->OutBase, E->OutUsed);
+    }
+    E->OutBase = NewBase;
+    E->OutCapacity = NewCapacity;
+}
+
+internal void
 Out(asm_emitter *E, char *Format, ...)
 {
+    /* Most lines are short, so reserve a small slice and format in one pass.
+     * Only an unusually long line takes the measured second pass. */
+    /* Most lines are plain literals. Skip varargs formatting entirely for them. */
+    if(!strchr(Format, '%'))
+    {
+        u32 Length = (u32)strlen(Format);
+        EnsureOutSpace(E, Length);
+        memcpy(E->OutBase + E->OutUsed, Format, Length);
+        E->OutUsed += Length;
+        return;
+    }
+
+    EnsureOutSpace(E, 256);
+
     va_list Args;
+    va_list Retry;
     va_start(Args, Format);
-    vfprintf(E->File, Format, Args);
+    va_copy(Retry, Args);
+
+    u32 Available = E->OutCapacity - E->OutUsed;
+    int Written = vsnprintf(E->OutBase + E->OutUsed, Available, Format, Args);
+    if((Written >= 0) && ((u32)Written < Available))
+    {
+        E->OutUsed += (u32)Written;
+    }
+    else if(Written > 0)
+    {
+        EnsureOutSpace(E, (u32)Written + 1);
+        Available = E->OutCapacity - E->OutUsed;
+        vsnprintf(E->OutBase + E->OutUsed, Available, Format, Retry);
+        E->OutUsed += (u32)Written;
+    }
+
+    va_end(Retry);
     va_end(Args);
 }
 
@@ -114,6 +169,39 @@ internal u32
 RegOffset(u32 Reg)
 {
     return((Reg + 1) * 16);
+}
+
+internal u32
+EmitRegKey(asm_emitter *E, u32 FunctionIndex, u32 Reg)
+{
+    u32 Result = E->RegOffsets[FunctionIndex] + Reg;
+    Assert(Result <= E->TotalRegs);
+    return(Result);
+}
+
+internal u32
+CountRegUses(ir_instruction *Instr, u32 Reg)
+{
+    u32 Result = 0;
+    if((Instr->A.Kind == IR_Reg) && (Instr->A.Reg == Reg))
+    {
+        ++Result;
+    }
+    if((Instr->B.Kind == IR_Reg) && (Instr->B.Reg == Reg))
+    {
+        ++Result;
+    }
+    if(Instr->Op == IR_Call)
+    {
+        for(u32 ArgIndex = 0; ArgIndex < Instr->ArgCount; ++ArgIndex)
+        {
+            if((Instr->ArgBase + ArgIndex) == Reg)
+            {
+                ++Result;
+            }
+        }
+    }
+    return(Result);
 }
 
 internal u32
@@ -753,10 +841,10 @@ EmitJump(asm_emitter *E, ir_program *IR, char *Opcode, u32 Target)
     /* A function entry instruction has both the flat .IR label and the real
      * function label. Branches must use the function label: landing on the
      * .IR label would fall through the prologue again on every loop back-edge. */
-    for(u32 FunctionIndex = 0; FunctionIndex < IR->FunctionCount;
-        ++FunctionIndex)
+    if(Target <= E->InstructionCount)
     {
-        if(IR->Functions[FunctionIndex].Entry == Target)
+        u32 FunctionIndex = E->FunctionForTarget[Target];
+        if(FunctionIndex < IR->FunctionCount)
         {
             /* .FB is just past the prologue. .LF remains the callable entry. */
             Out(E, "%s .FB%u\n", Opcode, FunctionIndex);
@@ -776,45 +864,10 @@ IsCompareOp(ir_op Op)
 }
 
 internal b32
-FusedCompareResultHasOneUse(ir_program *IR, u32 CompareIndex, u32 OwnerFunction,
-                            u32 Reg)
+FusedCompareResultHasOneUse(asm_emitter *E, u32 OwnerFunction, u32 Reg)
 {
-    u32 Uses = 0;
-    for(u32 Index = 0; Index < IR->InstructionCount; ++Index)
-    {
-        ir_instruction *Instr = IR->Instructions + Index;
-        if((Instr->OwnerFunction != OwnerFunction) || (Index == CompareIndex))
-        {
-            continue;
-        }
-
-        b32 IsFusedUse =
-            ((Index == CompareIndex + 1) &&
-             ((Instr->Op == IR_JumpIfFalse) || (Instr->Op == IR_JumpIfTrue)) &&
-             (Instr->A.Kind == IR_Reg) && (Instr->A.Reg == Reg));
-        if(IsFusedUse)
-        {
-            ++Uses;
-            continue;
-        }
-
-        if(((Instr->A.Kind == IR_Reg) && (Instr->A.Reg == Reg)) ||
-           ((Instr->B.Kind == IR_Reg) && (Instr->B.Reg == Reg)))
-        {
-            ++Uses;
-        }
-        if(Instr->Op == IR_Call)
-        {
-            for(u32 ArgIndex = 0; ArgIndex < Instr->ArgCount; ++ArgIndex)
-            {
-                if((Instr->ArgBase + ArgIndex) == Reg)
-                {
-                    ++Uses;
-                }
-            }
-        }
-    }
-    return(Uses == 1);
+    u32 Key = EmitRegKey(E, OwnerFunction, Reg);
+    return(E->RegUseCounts[Key] == 1);
 }
 
 internal b32
@@ -834,7 +887,7 @@ CanFuseCompareJump(asm_emitter *E, ir_program *IR, u32 Index)
            (Compare->OwnerFunction == Jump->OwnerFunction) && JumpUsesCompare &&
            !IsFunctionEntry(E, Index) && !IsFunctionEntry(E, Index + 1) &&
            !IsJumpTarget(E, Index + 1) &&
-           FusedCompareResultHasOneUse(IR, Index, Compare->OwnerFunction,
+           FusedCompareResultHasOneUse(E, Compare->OwnerFunction,
                                        Compare->Dst.Reg))
         {
             Result = 1;
@@ -860,19 +913,15 @@ EmitFusedCompareJump(asm_emitter *E, ir_program *IR, u32 Index)
 }
 
 internal b32
-GetIntegerConstantBefore(ir_program *IR, u32 OwnerFunction, u32 Reg,
-                         u32 BeforeIndex, i64 *Result)
+GetIntegerConstantBefore(asm_emitter *E, ir_program *IR, u32 OwnerFunction,
+                         u32 Reg, u32 BeforeIndex, i64 *Result)
 {
     b32 Found = 0;
-    for(u32 Index = BeforeIndex; Index > 0; --Index)
+    u32 Key = EmitRegKey(E, OwnerFunction, Reg);
+    u32 DefIndex = E->LastDefIndex[Key];
+    if((DefIndex != IRInvalid) && (DefIndex < BeforeIndex))
     {
-        ir_instruction *Instr = IR->Instructions + (Index - 1);
-        if((Instr->OwnerFunction != OwnerFunction) ||
-           (Instr->Dst.Kind != IR_Reg) || (Instr->Dst.Reg != Reg))
-        {
-            continue;
-        }
-
+        ir_instruction *Instr = IR->Instructions + DefIndex;
         if((Instr->Op == IR_LoadConst) && (Instr->A.Kind == IR_Const) &&
            (Instr->A.Const.Type.Kind == Type_Number))
         {
@@ -885,45 +934,21 @@ GetIntegerConstantBefore(ir_program *IR, u32 OwnerFunction, u32 Reg,
                 Found = 1;
             }
         }
-        break;
     }
     return(Found);
 }
 
 internal b32
-IntegerLoopCounterHasNoOutsideUses(ir_program *IR, u32 OwnerFunction,
-                                   u32 Index, u32 CounterReg)
+IntegerLoopCounterHasNoOutsideUses(asm_emitter *E, ir_program *IR,
+                                   u32 OwnerFunction, u32 Index, u32 CounterReg)
 {
-    for(u32 InstrIndex = 0; InstrIndex < IR->InstructionCount; ++InstrIndex)
+    u32 Key = EmitRegKey(E, OwnerFunction, CounterReg);
+    u32 WindowUses = 0;
+    for(u32 Offset = 0; Offset < 4; ++Offset)
     {
-        if((InstrIndex >= Index) && (InstrIndex <= Index + 3))
-        {
-            continue;
-        }
-
-        ir_instruction *Instr = IR->Instructions + InstrIndex;
-        if(Instr->OwnerFunction != OwnerFunction)
-        {
-            continue;
-        }
-
-        if(((Instr->A.Kind == IR_Reg) && (Instr->A.Reg == CounterReg)) ||
-           ((Instr->B.Kind == IR_Reg) && (Instr->B.Reg == CounterReg)))
-        {
-            return(0);
-        }
-        if(Instr->Op == IR_Call)
-        {
-            for(u32 ArgIndex = 0; ArgIndex < Instr->ArgCount; ++ArgIndex)
-            {
-                if((Instr->ArgBase + ArgIndex) == CounterReg)
-                {
-                    return(0);
-                }
-            }
-        }
+        WindowUses += CountRegUses(IR->Instructions + Index + Offset, CounterReg);
     }
-    return(1);
+    return(E->RegUseCounts[Key] == WindowUses);
 }
 
 internal b32
@@ -974,9 +999,9 @@ CanEmitIntegerEmptyLoop(asm_emitter *E, ir_program *IR, u32 Index)
     }
 
     u32 CounterReg = Compare->A.Reg;
-    if(!FusedCompareResultHasOneUse(IR, Index, Compare->OwnerFunction,
+    if(!FusedCompareResultHasOneUse(E, Compare->OwnerFunction,
                                     Compare->Dst.Reg) ||
-       !IntegerLoopCounterHasNoOutsideUses(IR, Compare->OwnerFunction, Index,
+       !IntegerLoopCounterHasNoOutsideUses(E, IR, Compare->OwnerFunction, Index,
                                            CounterReg))
     {
         return(Result);
@@ -985,11 +1010,11 @@ CanEmitIntegerEmptyLoop(asm_emitter *E, ir_program *IR, u32 Index)
     i64 Start = 0;
     i64 End = 0;
     i64 Step = 0;
-    if(GetIntegerConstantBefore(IR, Compare->OwnerFunction, CounterReg,
+    if(GetIntegerConstantBefore(E, IR, Compare->OwnerFunction, CounterReg,
                                 Index, &Start) &&
-       GetIntegerConstantBefore(IR, Compare->OwnerFunction, Compare->B.Reg,
+       GetIntegerConstantBefore(E, IR, Compare->OwnerFunction, Compare->B.Reg,
                                 Index, &End) &&
-       GetIntegerConstantBefore(IR, Compare->OwnerFunction, Add->B.Reg,
+       GetIntegerConstantBefore(E, IR, Compare->OwnerFunction, Add->B.Reg,
                                 Index, &Step) &&
        (Step != 0))
     {
@@ -1009,10 +1034,10 @@ EmitIntegerEmptyLoop(asm_emitter *E, ir_program *IR, u32 Index)
     i64 Start = 0;
     i64 End = 0;
     i64 Step = 0;
-    GetIntegerConstantBefore(IR, Compare->OwnerFunction, CounterReg, Index,
+    GetIntegerConstantBefore(E, IR, Compare->OwnerFunction, CounterReg, Index,
                              &Start);
-    GetIntegerConstantBefore(IR, Compare->OwnerFunction, EndReg, Index, &End);
-    GetIntegerConstantBefore(IR, Compare->OwnerFunction,
+    GetIntegerConstantBefore(E, IR, Compare->OwnerFunction, EndReg, Index, &End);
+    GetIntegerConstantBefore(E, IR, Compare->OwnerFunction,
                              IR->Instructions[Index + 2].B.Reg, Index, &Step);
 
     char *LoopLabel = NewLabel(E, "IL");
@@ -1159,22 +1184,31 @@ EmitInstruction(asm_emitter *E, ir_program *IR, u32 Index)
 internal void
 EmitAscii(asm_emitter *E, string Value)
 {
+    EnsureOutSpace(E, Value.Count * 4 + 1);
+    char *At = E->OutBase + E->OutUsed;
+
     for(u32 Index = 0; Index < Value.Count; ++Index)
     {
         u8 Byte = (u8)Value.Data[Index];
         if((Byte == '"') || (Byte == '\\'))
         {
-            Out(E, "\\%c", (char)Byte);
+            *At++ = '\\';
+            *At++ = (char)Byte;
         }
         else if((Byte >= 32) && (Byte < 127))
         {
-            Out(E, "%c", (char)Byte);
+            *At++ = (char)Byte;
         }
         else
         {
-            Out(E, "\\%03o", Byte);
+            *At++ = '\\';
+            *At++ = '0' + (char)((Byte >> 6) & 7);
+            *At++ = '0' + (char)((Byte >> 3) & 7);
+            *At++ = '0' + (char)(Byte & 7);
         }
     }
+
+    E->OutUsed = (u32)(At - E->OutBase);
 }
 
 internal void
@@ -1273,6 +1307,11 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
     E.File = File;
     E.Arena = Arena;
 
+    memory_index InitialCapacity =
+        (memory_index)IR->Parser->Source->Size * 32 + Kilobytes(4);
+    E.OutCapacity = (u32)Minimum(InitialCapacity, Megabytes(64));
+    E.OutBase = PushArray(Arena, E.OutCapacity, char);
+
     u32 NodeCount = IR->Parser->StmtCap + IR->Parser->ExprCap + 16;
     E.StringCapacity = NodeCount * 4;
     E.NumberCapacity = NodeCount * 4;
@@ -1287,6 +1326,57 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
     ZeroSize((IR->InstructionCount + 1) * sizeof(*E.JumpTargets),
              E.JumpTargets);
 
+    E.RegOffsets = PushArray(Arena, IR->FunctionCount + 1, u32);
+    E.TotalRegs = 0;
+    for(u32 FunctionIndex = 0; FunctionIndex < IR->FunctionCount;
+        ++FunctionIndex)
+    {
+        E.RegOffsets[FunctionIndex] = E.TotalRegs;
+        E.TotalRegs += IR->Functions[FunctionIndex].RegCount;
+    }
+    E.RegOffsets[IR->FunctionCount] = E.TotalRegs;
+
+    E.RegUseCounts = PushArray(Arena, E.TotalRegs + 1, u32);
+    E.LastDefIndex = PushArray(Arena, E.TotalRegs + 1, u32);
+    E.FunctionForTarget = PushArray(Arena, IR->InstructionCount + 1, u32);
+    ZeroSize((E.TotalRegs + 1) * sizeof(*E.RegUseCounts), E.RegUseCounts);
+    for(u32 Index = 0; Index <= E.TotalRegs; ++Index)
+    {
+        E.LastDefIndex[Index] = IRInvalid;
+    }
+    for(u32 Index = 0; Index <= IR->InstructionCount; ++Index)
+    {
+        E.FunctionForTarget[Index] = IR->FunctionCount;
+    }
+
+    for(u32 Index = 0; Index < IR->InstructionCount; ++Index)
+    {
+        ir_instruction *Instr = IR->Instructions + Index;
+        if(Instr->Dst.Kind == IR_Reg)
+        {
+            E.LastDefIndex[EmitRegKey(&E, Instr->OwnerFunction,
+                                      Instr->Dst.Reg)] = Index;
+        }
+        if(Instr->A.Kind == IR_Reg)
+        {
+            ++E.RegUseCounts[EmitRegKey(&E, Instr->OwnerFunction,
+                                       Instr->A.Reg)];
+        }
+        if(Instr->B.Kind == IR_Reg)
+        {
+            ++E.RegUseCounts[EmitRegKey(&E, Instr->OwnerFunction,
+                                       Instr->B.Reg)];
+        }
+        if(Instr->Op == IR_Call)
+        {
+            for(u32 ArgIndex = 0; ArgIndex < Instr->ArgCount; ++ArgIndex)
+            {
+                u32 Reg = Instr->ArgBase + ArgIndex;
+                ++E.RegUseCounts[EmitRegKey(&E, Instr->OwnerFunction, Reg)];
+            }
+        }
+    }
+
     for(u32 FunctionIndex = 0; FunctionIndex < IR->FunctionCount;
         ++FunctionIndex)
     {
@@ -1297,6 +1387,10 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
         if(Info->Entry <= IR->InstructionCount)
         {
             E.FunctionEntries[Info->Entry] = 1;
+            if(E.FunctionForTarget[Info->Entry] == IR->FunctionCount)
+            {
+                E.FunctionForTarget[Info->Entry] = FunctionIndex;
+            }
         }
     }
 
@@ -1313,4 +1407,9 @@ EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena)
 
     EmitCode(&E, IR);
     EmitData(&E, IR);
+
+    if(E.OutUsed)
+    {
+        fwrite(E.OutBase, 1, E.OutUsed, File);
+    }
 }

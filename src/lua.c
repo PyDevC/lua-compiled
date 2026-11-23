@@ -27,6 +27,7 @@
 #include "ir.h"
 #include "x86.h"
 
+#include "messages.c"
 #include "lexer.c"
 #include "parser.c"
 #include "types.c"
@@ -44,17 +45,6 @@ Fatal(char *Format, ...)
     va_end(Args);
     fprintf(stderr, "\n");
     exit(1);
-}
-
-void
-Error(char *Format, ...)
-{
-    fprintf(stderr, "error: ");
-    va_list Args;
-    va_start(Args, Format);
-    vfprintf(stderr, Format, Args);
-    va_end(Args);
-    fprintf(stderr, "\n");
 }
 
 void
@@ -121,72 +111,88 @@ MakeString(char *Data, u32 Count)
 string
 StringFromC(char *CString)
 {
-    string Result = MakeString(CString, (u32)strlen(CString));
+    string Result = {0};
+    if(CString)
+    {
+        Result = MakeString(CString, (u32)strlen(CString));
+    }
     return(Result);
 }
 
 b32
 StringsEqual(string A, string B)
 {
-    b32 Result = ((A.Count == B.Count) &&
-                  (memcmp(A.Data, B.Data, A.Count) == 0));
+    b32 Result = 0;
+    if(A.Count == B.Count)
+    {
+        if(A.Count == 0)
+        {
+            Result = 1;
+        }
+        else if(A.Data && B.Data)
+        {
+            Result = (memcmp(A.Data, B.Data, A.Count) == 0);
+        }
+    }
     return(Result);
 }
 
 internal u32
-GetFileSize(char *FileName)
+GetFileSize(char *FileName, message_log *Log)
 {
+    u32 Result = 0;
     FILE *File = fopen(FileName, "rb");
     if(!File)
     {
-        Fatal("cannot open '%s'", FileName);
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot open '%s'", FileName);
+        return(Result);
     }
 
-    if((fseek(File, 0, SEEK_END) != 0))
+    if(fseek(File, 0, SEEK_END) != 0)
     {
-        Fatal("cannot seek '%s'", FileName);
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot seek '%s'", FileName);
+        fclose(File);
+        return(Result);
     }
 
     long Size = ftell(File);
     fclose(File);
     if(Size < 0)
     {
-        Fatal("cannot size '%s'", FileName);
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot size '%s'", FileName);
+        return(Result);
     }
 
-    u32 Result = (u32)Size;
+    Result = (u32)Size;
     return(Result);
 }
 
 source_file
-ReadEntireFile(memory_arena *Arena, char *FileName)
+ReadEntireFile(memory_arena *Arena, char *FileName, u32 Size, message_log *Log)
 {
-    source_file Result = {0};
     FILE *File = fopen(FileName, "rb");
     if(!File)
     {
-        Fatal("cannot open '%s'", FileName);
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot open '%s'", FileName);
+        return(NilSource);
     }
 
-    if(fseek(File, 0, SEEK_END) != 0)
-    {
-        Fatal("cannot seek '%s'", FileName);
-    }
-    long FileSize = ftell(File);
-    if((FileSize < 0) || (fseek(File, 0, SEEK_SET) != 0))
-    {
-        Fatal("cannot size '%s'", FileName);
-    }
-
-    u32 Size = (u32)FileSize;
     char *Data = PushArray(Arena, (memory_index)Size + 1, char);
     if(fread(Data, 1, (size_t)Size, File) != (size_t)Size)
     {
-        Fatal("cannot read '%s'", FileName);
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot read '%s'", FileName);
+        fclose(File);
+        return(NilSource);
     }
     fclose(File);
     Data[Size] = 0;
 
+    source_file Result = {0};
     Result.FileName = FileName;
     Result.Data = Data;
     Result.Size = Size;
@@ -201,6 +207,7 @@ typedef struct cmdline_params
     b32 DumpIR;
     b32 ParseOnly;
     b32 Verbose;
+    b32 ShowUsage;
 } cmdline_params;
 
 internal void
@@ -215,7 +222,7 @@ PrintUsage(void)
 }
 
 internal cmdline_params
-ParseCommandLine(int argc, char **argv)
+ParseCommandLine(int argc, char **argv, message_log *Log)
 {
     cmdline_params Params = {0};
     for(int Index = 1; Index < argc; ++Index)
@@ -225,8 +232,7 @@ ParseCommandLine(int argc, char **argv)
         {
             if(strcmp(Arg, "-h") == 0)
             {
-                PrintUsage();
-                exit(0);
+                Params.ShowUsage = 1;
             }
             else if(strcmp(Arg, "-d") == 0)
             {
@@ -248,21 +254,33 @@ ParseCommandLine(int argc, char **argv)
             {
                 if((Index + 1) >= argc)
                 {
-                    Fatal("-s needs a file name");
+                    PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "cmdline",
+                                "-s needs a file name");
+                    Params.ShowUsage = 1;
                 }
-                Params.AsmFileName = argv[++Index];
+                else
+                {
+                    Params.AsmFileName = argv[++Index];
+                }
             }
             else
             {
-                fprintf(stderr, "unknown flag '%s'\n", Arg);
-                PrintUsage();
-                exit(1);
+                PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "cmdline",
+                            "unknown flag '%s'", Arg);
+                Params.ShowUsage = 1;
             }
         }
         else
         {
             Params.FileName = Arg;
         }
+    }
+
+    if(!Params.FileName && !Params.ShowUsage)
+    {
+        PushMessage(Log, Msg_Error, &NilSource, SourceOffsetNone, "cmdline",
+                    "no input file");
+        Params.ShowUsage = 1;
     }
     return(Params);
 }
@@ -321,46 +339,86 @@ ComputeArenaSize(u32 FileSize)
     return(Result);
 }
 
+#define MESSAGE_ARENA_SIZE Kilobytes(64)
+
 int
 main(int argc, char **argv)
 {
-    cmdline_params Params = ParseCommandLine(argc, argv);
-    if(!Params.FileName)
+    int ExitCode = 1;
+    void *CompileMemory = 0;
+    FILE *Output = 0;
+    u8 MessageMemory[MESSAGE_ARENA_SIZE];
+    memory_arena LogArena = {0};
+    memory_arena CompileArena = {0};
+    message_log Log = {0};
+    cmdline_params Params = {0};
+    source_file Source = NilSource;
+    Parser P = {0};
+    semantic_context Semantic = {0};
+    ir_program IR = {0};
+    ASTIndex Root = ASTNone;
+    u32 FileSize = 0;
+    memory_index ArenaSize = 0;
+    clock_t Start = 0;
+    clock_t ParseEnd = 0;
+    clock_t SemanticEnd = 0;
+    clock_t GenerateEnd = 0;
+    clock_t IREnd = 0;
+    clock_t EmitEnd = 0;
+
+    /* The diagnostic arena is a fixed stack buffer: expected failures are
+     * appended to this log and reported at the one shallow exit below. No pass
+     * prints or exits on its own, and the common path performs no allocation
+     * for diagnostics at all. */
+    InitializeArena(&LogArena, sizeof(MessageMemory), MessageMemory);
+    InitMessageLog(&Log, &LogArena);
+
+    Params = ParseCommandLine(argc, argv, &Log);
+    if(Params.ShowUsage)
     {
         PrintUsage();
-        return(1);
+        ExitCode = MessageLogHasErrors(&Log) ? 1 : 0;
+        goto done;
+    }
+
+    FileSize = GetFileSize(Params.FileName, &Log);
+    if(MessageLogHasErrors(&Log))
+    {
+        goto done;
     }
 
     /* One arena for the whole compilation: source, AST, symbols, IR and the
      * assembly string tables all live here and die with the process. */
-    u32 FileSize = GetFileSize(Params.FileName);
-    memory_index ArenaSize = ComputeArenaSize(FileSize);
-    void *Memory = malloc(ArenaSize);
-    if(!Memory)
+    ArenaSize = ComputeArenaSize(FileSize);
+    CompileMemory = malloc(ArenaSize);
+    if(!CompileMemory)
     {
-        Fatal("out of memory");
+        PushMessage(&Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "out of memory");
+        goto done;
     }
+    InitializeArena(&CompileArena, ArenaSize, CompileMemory);
 
-    memory_arena Arena = {0};
-    InitializeArena(&Arena, ArenaSize, Memory);
     if(!Params.AsmFileName)
     {
-        Params.AsmFileName = DefaultAsmFileName(&Arena, Params.FileName);
+        Params.AsmFileName = DefaultAsmFileName(&CompileArena, Params.FileName);
     }
-    source_file Source = ReadEntireFile(&Arena, Params.FileName);
+    Source = ReadEntireFile(&CompileArena, Params.FileName, FileSize, &Log);
+    if(MessageLogHasErrors(&Log))
+    {
+        goto done;
+    }
 
-    clock_t Start = clock();
-
-    Parser P;
-    InitParser(&P, &Arena, &Source);
-    ASTIndex Root = ParseChunk(&P);
+    Start = clock();
+    InitParser(&P, &CompileArena, &Source, &Log);
+    Root = ParseChunk(&P);
     if(!ParserOK(&P))
     {
-        free(Memory);
-        return(1);
+        /* A failed parse produces a zero-valid empty tree. Later passes can
+         * still run without special "parse failed" codepaths. */
+        Root = ASTNone;
     }
-
-    clock_t ParseEnd = clock();
+    ParseEnd = clock();
     VerbosePrint(Params, "parse: %u statements, %u expressions, %.3f ms\n",
                  P.StmtLen, P.ExprLen,
                  1000.0 * (f64)(ParseEnd - Start) / (f64)CLOCKS_PER_SEC);
@@ -370,32 +428,39 @@ main(int argc, char **argv)
         DumpStatement(&P, Root);
     }
 
-    semantic_context Semantic;
-    InitSemantic(&Semantic, &P, &Arena);
+    InitSemantic(&Semantic, &P, &CompileArena, &Log);
     AnalyzeSemantic(&Semantic, Root);
-    if(Semantic.HadError)
-    {
-        free(Memory);
-        return(1);
-    }
-
-    clock_t SemanticEnd = clock();
+    SemanticEnd = clock();
     VerbosePrint(Params, "semantic: %u symbols, %u functions, %.3f ms\n",
                  Semantic.SymbolCount, Semantic.FunctionCount,
                  1000.0 * (f64)(SemanticEnd - ParseEnd) /
                      (f64)CLOCKS_PER_SEC);
 
-    if(Params.ParseOnly)
+    if(MessageLogHasErrors(&Log))
     {
-        free(Memory);
-        return(0);
+        goto done;
     }
 
-    ir_program IR;
-    InitIR(&IR, &P, &Semantic, &Arena);
+    if(Params.ParseOnly)
+    {
+        ExitCode = 0;
+        goto done;
+    }
+
+    /* Check the shallow, user-visible resource boundary before entering the
+     * optimizer and emitter. */
+    Output = fopen(Params.AsmFileName, "w");
+    if(!Output)
+    {
+        PushMessage(&Log, Msg_Error, &NilSource, SourceOffsetNone, "platform",
+                    "cannot write '%s'", Params.AsmFileName);
+        goto done;
+    }
+
+    InitIR(&IR, &P, &Semantic, &CompileArena);
     GenerateIR(&IR, Root);
 
-    clock_t GenerateEnd = clock();
+    GenerateEnd = clock();
     VerbosePrint(Params, "ir: %u instructions, %u registers, %.3f ms\n",
                  IR.InstructionCount, IR.FrameRegCount,
                  1000.0 * (f64)(GenerateEnd - SemanticEnd) /
@@ -403,7 +468,7 @@ main(int argc, char **argv)
 
     u32 PreOptInstructionCount = IR.InstructionCount;
     OptimizeIR(&IR);
-    clock_t IREnd = clock();
+    IREnd = clock();
     VerbosePrint(Params, "opt: %u -> %u instructions, %.3f ms\n",
                  PreOptInstructionCount, IR.InstructionCount,
                  1000.0 * (f64)(IREnd - GenerateEnd) / (f64)CLOCKS_PER_SEC);
@@ -413,20 +478,20 @@ main(int argc, char **argv)
         DumpIR(&IR);
     }
 
-    FILE *Output = fopen(Params.AsmFileName, "w");
-    if(!Output)
-    {
-        Fatal("cannot write '%s'", Params.AsmFileName);
-    }
-
     VerbosePrint(Params, "asm: %s\n", Params.AsmFileName);
-    EmitAssembly(Output, &IR, &Arena);
-    fclose(Output);
-
-    clock_t EmitEnd = clock();
+    EmitAssembly(Output, &IR, &CompileArena);
+    EmitEnd = clock();
     VerbosePrint(Params, "emit: %.3f ms\n",
                  1000.0 * (f64)(EmitEnd - IREnd) / (f64)CLOCKS_PER_SEC);
 
-    free(Memory);
-    return(0);
+    ExitCode = 0;
+
+done:
+    if(Output)
+    {
+        fclose(Output);
+    }
+    PrintMessages(&Log, stderr);
+    free(CompileMemory);
+    return(ExitCode);
 }

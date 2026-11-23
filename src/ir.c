@@ -1778,8 +1778,9 @@ internal void
 OptimizeIR(ir_program *IR)
 {
     /* Compaction exposes new jump-to-next pairs and new constant producers.
-     * Two or three cheap passes are enough to settle this small IR. */
-    for(u32 Pass = 0; Pass < 3; ++Pass)
+     * Two cheap passes settle this IR; a third was measured as a no-op on the
+     * benchmark corpus, so it is not part of the common path. */
+    for(u32 Pass = 0; Pass < 2; ++Pass)
     {
         u32 Before = IR->InstructionCount;
         OptimizeIRPass(IR);

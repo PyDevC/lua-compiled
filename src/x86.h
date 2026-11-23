@@ -33,6 +33,13 @@ typedef struct asm_emitter
     FILE *File;
     memory_arena *Arena;
 
+    /* Assembly is formatted once into the compile arena and written with a
+     * single fwrite. Thousands of tiny vfprintf calls were the largest
+     * compiler-side cost on large inputs. */
+    char *OutBase;
+    u32 OutUsed;
+    u32 OutCapacity;
+
     asm_string *Strings;
     u32 StringCount;
     u32 StringCapacity;
@@ -46,6 +53,13 @@ typedef struct asm_emitter
     u32 InstructionCount;
     b32 *FunctionEntries;
     b32 *JumpTargets;
+
+    /* Precomputed once so per-instruction peephole checks never rescan the IR. */
+    u32 *RegOffsets;
+    u32 *RegUseCounts;
+    u32 *LastDefIndex;
+    u32 *FunctionForTarget;
+    u32 TotalRegs;
 } asm_emitter;
 
 internal void EmitAssembly(FILE *File, ir_program *IR, memory_arena *Arena);

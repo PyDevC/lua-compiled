@@ -16,17 +16,25 @@ internal void AnalyzeList(semantic_context *Context, ASTIndex First);
 internal void AnalyzeStatement(semantic_context *Context, ASTIndex Index);
 internal void AnalyzeExpr(semantic_context *Context, ASTIndex Index);
 
-internal void
-SemanticError(semantic_context *Context, char *Format, ...)
-{
-    Context->HadError = 1;
-    fprintf(stderr, "semantic error: ");
+global_variable semantic_symbol NilSymbol = {0};
+global_variable function_signature NilFunction = {0};
 
+internal void
+SemanticErrorV(semantic_context *Context, u32 Offset, char *Format,
+               va_list Args)
+{
+    source_file *Source = Context->Parser ? Context->Parser->Source : &NilSource;
+    PushMessageV(Context->Log, Msg_Error, Source, Offset, "semantic", Format,
+                 Args);
+}
+
+internal void
+SemanticErrorAt(semantic_context *Context, u32 Offset, char *Format, ...)
+{
     va_list Args;
     va_start(Args, Format);
-    vfprintf(stderr, Format, Args);
+    SemanticErrorV(Context, Offset, Format, Args);
     va_end(Args);
-    fprintf(stderr, "\n");
 }
 
 internal void
@@ -51,16 +59,23 @@ PopScope(semantic_context *Context)
 internal semantic_symbol *
 GetSymbol(semantic_context *Context, u32 Index)
 {
-    Assert(Index != SymbolNone);
-    Assert(Index < Context->SymbolCount);
-    return(Context->Symbols + Index);
+    semantic_symbol *Result = &NilSymbol;
+    if((Index != SymbolNone) && (Index < Context->SymbolCount))
+    {
+        Result = Context->Symbols + Index;
+    }
+    return(Result);
 }
 
 internal function_signature *
 GetFunction(semantic_context *Context, u32 Index)
 {
-    Assert(Index < Context->FunctionCount);
-    return(Context->Functions + Index);
+    function_signature *Result = &NilFunction;
+    if(Index < Context->FunctionCount)
+    {
+        Result = Context->Functions + Index;
+    }
+    return(Result);
 }
 
 internal semantic_symbol *
@@ -189,11 +204,18 @@ UnifyExprType(semantic_context *Context, ASTIndex ExprIndex, lua_type Type)
     if(E->SymbolIndex != SymbolNone)
     {
         semantic_symbol *Symbol = GetSymbol(Context, E->SymbolIndex);
-        if(!UnifyType(&Symbol->Type, Type))
+        if(Symbol == &NilSymbol)
         {
             Result = 0;
         }
-        E->Type = Symbol->Type;
+        else
+        {
+            if(!UnifyType(&Symbol->Type, Type))
+            {
+                Result = 0;
+            }
+            E->Type = Symbol->Type;
+        }
     }
     else if((E->type == ExprFuncCall) &&
         TypeIsValid(GetExpr(P, E->as.call.callee)->Type) &&
@@ -211,8 +233,9 @@ UnifyExprType(semantic_context *Context, ASTIndex ExprIndex, lua_type Type)
 
     if(!Result)
     {
-        SemanticError(Context, "type mismatch: expected %s, got %s",
-                      TypeName(Type), TypeName(E->Type));
+        SemanticErrorAt(Context, E->Offset,
+                        "type mismatch: expected %s, got %s",
+                        TypeName(Type), TypeName(E->Type));
     }
     return(Result);
 }
@@ -223,7 +246,9 @@ RequireExprType(semantic_context *Context, ASTIndex ExprIndex,
 {
     if(!UnifyExprType(Context, ExprIndex, Required))
     {
-        SemanticError(Context, "%s requires %s", What, TypeName(Required));
+        Expr *E = GetExpr(Context->Parser, ExprIndex);
+        SemanticErrorAt(Context, E->Offset, "%s requires %s", What,
+                        TypeName(Required));
     }
 }
 
@@ -237,8 +262,8 @@ RegisterFunctionStatement(semantic_context *Context, Statement *S)
 
     if(FindSymbol(Context, Name))
     {
-        SemanticError(Context, "'%.*s' is already declared", (int)Name.Count,
-                      Name.Data);
+        SemanticErrorAt(Context, S->Offset, "'%.*s' is already declared",
+                        (int)Name.Count, Name.Data);
         return;
     }
 
@@ -325,11 +350,14 @@ RegisterFunctionList(semantic_context *Context, ASTIndex First)
 }
 
 void
-InitSemantic(semantic_context *Context, Parser *P, memory_arena *Arena)
+InitSemantic(semantic_context *Context, Parser *P, memory_arena *Arena,
+             message_log *Log)
 {
     ZeroStruct(*Context);
     Context->Parser = P;
     Context->Arena = Arena;
+    Context->Log = Log;
+    Context->StartErrorCount = Log ? Log->List.ErrorCount : 0;
 
     u32 NodeCount = P->StmtCap + 16;
     Context->SymbolCapacity = NodeCount * 2;
@@ -413,15 +441,16 @@ AnalyzeExpr(semantic_context *Context, ASTIndex Index)
                     u32 BuiltinIndex = FindBuiltinSignature(Context, Name);
                     if(BuiltinIndex == SymbolNone)
                     {
-                        SemanticError(Context, "undefined variable '%.*s'",
-                                      (int)Name.Count, Name.Data);
+                        SemanticErrorAt(Context, E->Offset,
+                                        "undefined variable '%.*s'",
+                                        (int)Name.Count, Name.Data);
                         E->Type = SimpleType(Type_Unknown);
                     }
                     else if(!E->IsCallCallee)
                     {
-                        SemanticError(Context,
-                                      "builtin '%.*s' may only be called directly",
-                                      (int)Name.Count, Name.Data);
+                        SemanticErrorAt(Context, E->Offset,
+                                        "builtin '%.*s' may only be called directly",
+                                        (int)Name.Count, Name.Data);
                         E->Type = SimpleType(Type_Unknown);
                     }
                     else
@@ -515,7 +544,8 @@ AnalyzeExpr(semantic_context *Context, ASTIndex Index)
                 Expr *Callee = GetExpr(P, CalleeIndex);
                 if(Callee->type != ExprVariable)
                 {
-                    SemanticError(Context, "only direct function calls are supported");
+                    SemanticErrorAt(Context, E->Offset,
+                                    "only direct function calls are supported");
                     E->Type = SimpleType(Type_Unknown);
                     break;
                 }
@@ -525,22 +555,30 @@ AnalyzeExpr(semantic_context *Context, ASTIndex Index)
                 Callee->IsCallCallee = 0;
                 if(Callee->Type.Kind != Type_Function)
                 {
-                    SemanticError(Context, "'%s' is not a function",
-                                  TypeName(Callee->Type));
+                    SemanticErrorAt(Context, E->Offset,
+                                    "'%s' is not a function",
+                                    TypeName(Callee->Type));
                     E->Type = SimpleType(Type_Unknown);
                     break;
                 }
 
                 function_signature *Sig =
                     GetFunction(Context, Callee->Type.SignatureIndex);
+                if(Sig == &NilFunction)
+                {
+                    SemanticErrorAt(Context, E->Offset,
+                                    "invalid function signature");
+                    E->Type = SimpleType(Type_Unknown);
+                    break;
+                }
                 u32 ArgCount = E->as.call.argc;
 
                 if(!Sig->IsBuiltin && (ArgCount != Sig->ParamCount))
                 {
-                    SemanticError(Context,
-                                  "wrong argument count for '%.*s': got %u, expected %u",
-                                  (int)Sig->Name.Count, Sig->Name.Data, ArgCount,
-                                  Sig->ParamCount);
+                    SemanticErrorAt(Context, E->Offset,
+                                    "wrong argument count for '%.*s': got %u, expected %u",
+                                    (int)Sig->Name.Count, Sig->Name.Data, ArgCount,
+                                    Sig->ParamCount);
                 }
 
                 ASTIndex Arg = E->as.call.i_arg;
@@ -611,10 +649,10 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
                 {
                     if(!UnifyType(&Symbol->Type, ValueType))
                     {
-                        SemanticError(Context,
-                                      "cannot assign %s to '%.*s' of type %s",
-                                      TypeName(ValueType), (int)Name.Count,
-                                      Name.Data, TypeName(Symbol->Type));
+                        SemanticErrorAt(Context, S->Offset,
+                                        "cannot assign %s to '%.*s' of type %s",
+                                        TypeName(ValueType), (int)Name.Count,
+                                        Name.Data, TypeName(Symbol->Type));
                     }
                     S->SymbolIndex = (u32)(Symbol - Context->Symbols);
                 }
@@ -707,6 +745,12 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
             {
                 u32 SigIndex = S->Type.SignatureIndex;
                 function_signature *Sig = GetFunction(Context, SigIndex);
+                if(Sig == &NilFunction)
+                {
+                    SemanticErrorAt(Context, S->Offset,
+                                    "invalid function signature");
+                    break;
+                }
                 u32 SavedFunction = Context->CurrentFunction;
                 Context->CurrentFunction = SigIndex;
 
@@ -753,20 +797,27 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
             {
                 if(Context->CurrentFunction == ChunkFunctionIndex)
                 {
-                    SemanticError(Context, "'return' is not allowed in the main chunk");
+                    SemanticErrorAt(Context, S->Offset,
+                                    "'return' is not allowed in the main chunk");
                     break;
                 }
                 function_signature *Sig =
                     GetFunction(Context, Context->CurrentFunction);
+                if(Sig == &NilFunction)
+                {
+                    SemanticErrorAt(Context, S->Offset,
+                                    "invalid function signature");
+                    break;
+                }
                 if(S->as.return_value != ASTNone)
                 {
                     AnalyzeExpr(Context, S->as.return_value);
                     lua_type ValueType = GetExpr(P, S->as.return_value)->Type;
                     if(!UnifyType(&Sig->Return, ValueType))
                     {
-                        SemanticError(Context,
-                                      "cannot return %s from function returning %s",
-                                      TypeName(ValueType), TypeName(Sig->Return));
+                        SemanticErrorAt(Context, S->Offset,
+                                        "cannot return %s from function returning %s",
+                                        TypeName(ValueType), TypeName(Sig->Return));
                     }
                 }
                 else
@@ -774,9 +825,9 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
                     lua_type NilType = SimpleType(Type_Nil);
                     if(!UnifyType(&Sig->Return, NilType))
                     {
-                        SemanticError(Context,
-                                      "function returning %s cannot return no value",
-                                      TypeName(Sig->Return));
+                        SemanticErrorAt(Context, S->Offset,
+                                        "function returning %s cannot return no value",
+                                        TypeName(Sig->Return));
                     }
                 }
             } break;
@@ -785,7 +836,8 @@ AnalyzeStatement(semantic_context *Context, ASTIndex Index)
             {
                 if(Context->LoopDepth == 0)
                 {
-                    SemanticError(Context, "'break' is only valid inside a loop");
+                    SemanticErrorAt(Context, S->Offset,
+                                    "'break' is only valid inside a loop");
                 }
             } break;
 

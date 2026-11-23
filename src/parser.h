@@ -37,6 +37,8 @@ typedef struct Parser
     LexState LexState;
     source_file *Source;
     memory_arena *Arena;
+    message_log *Log;
+    u32 StartErrorCount;
 
     Expr *ExprPool;
     u32 ExprCap;
@@ -46,10 +48,10 @@ typedef struct Parser
     u32 StmtCap;
     u32 StmtLen;
 
-    b32 HadError;
 } Parser;
 
-void InitParser(Parser *Parser, memory_arena *Arena, source_file *Source);
+void InitParser(Parser *Parser, memory_arena *Arena, source_file *Source,
+                message_log *Log);
 ASTIndex ParseChunk(Parser *Parser);
 b32 ParserOK(Parser *Parser);
 

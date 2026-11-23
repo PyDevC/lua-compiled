@@ -49,6 +49,8 @@ typedef struct semantic_context
 {
     Parser *Parser;
     memory_arena *Arena;
+    message_log *Log;
+    u32 StartErrorCount;
 
     semantic_symbol *Symbols;
     u32 SymbolCount;
@@ -70,14 +72,13 @@ typedef struct semantic_context
 
     u32 CurrentFunction;
     u32 LoopDepth;
-    b32 HadError;
 } semantic_context;
 
 #define ChunkFunctionIndex 2
 #define SymbolNone ((u32)-1)
 
 void InitSemantic(semantic_context *Context, Parser *Parser,
-                  memory_arena *Arena);
+                  memory_arena *Arena, message_log *Log);
 void AnalyzeSemantic(semantic_context *Context, ASTIndex FirstStatement);
 
 internal semantic_symbol *GetSymbol(semantic_context *Context, u32 Index);

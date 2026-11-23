@@ -82,28 +82,8 @@ FirstNonIdentifierByte(u64 Mask)
 }
 
 internal void
-AdvanceWhitespaceWord(lexer_cursor *Cursor, u64 LineFeedMask)
+AdvanceWhitespaceWord(lexer_cursor *Cursor)
 {
-    u32 LineFeeds = 0;
-    u32 LastLineFeed = 8;
-    for(u32 Index = 0; Index < 8; ++Index)
-    {
-        if(LineFeedMask & ((u64)0x80 << (8 * Index)))
-        {
-            ++LineFeeds;
-            LastLineFeed = Index;
-        }
-    }
-
-    if(LineFeeds)
-    {
-        Cursor->Line += LineFeeds;
-        Cursor->Column = 7 - LastLineFeed;
-    }
-    else
-    {
-        Cursor->Column += 8;
-    }
     Cursor->At += 8;
 }
 
@@ -118,11 +98,9 @@ SkipIdentifierRun(lexer_cursor *Cursor)
         {
             u32 Count = FirstNonIdentifierByte(Mask);
             Cursor->At += Count;
-            Cursor->Column += Count;
             return;
         }
         Cursor->At += 8;
-        Cursor->Column += 8;
     }
 
     while((Cursor->At < Cursor->End) && IsIdentChar(*Cursor->At))
@@ -213,19 +191,7 @@ KeywordString(ReservedToken Type)
 internal void
 AdvanceCursor(lexer_cursor *Cursor, u32 Count)
 {
-    for(u32 Index = 0; (Index < Count) && (Cursor->At < Cursor->End); ++Index)
-    {
-        char C = *Cursor->At++;
-        if(C == '\n')
-        {
-            Cursor->Line++;
-            Cursor->Column = 0;
-        }
-        else
-    {
-            Cursor->Column++;
-        }
-    }
+    Cursor->At += Minimum(Count, (u32)(Cursor->End - Cursor->At));
 }
 
 internal void
@@ -238,7 +204,7 @@ SkipWhitespace(lexer_cursor *Cursor)
         {
             break;
         }
-        AdvanceWhitespaceWord(Cursor, SWAR_HASZERO(Word ^ (SWAR_ONES * '\n')));
+        AdvanceWhitespaceWord(Cursor);
     }
 
     while((Cursor->At < Cursor->End) && IsWhitespace(*Cursor->At))
@@ -264,8 +230,7 @@ ScanNextToken(lexer_cursor *Cursor)
 
     Token Result = {0};
     Result.tok_type = TK_ILLEGAL;
-    Result.line = Cursor->Line;
-    Result.column = Cursor->Column;
+    Result.offset = (u32)(Cursor->At - Cursor->Base);
 
     if(Cursor->At >= Cursor->End)
     {

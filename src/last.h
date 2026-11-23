@@ -38,6 +38,10 @@ typedef struct Expr
     ExprType type;
     ASTIndex next;
 
+    /* Byte offset of the token that started this node. Line/column are
+     * computed only when a diagnostic is printed. */
+    u32 Offset;
+
     /* Filled by the semantic pass. SymbolIndex is ASTNone for expressions
      * that do not name a variable. */
     u32 SymbolIndex;
@@ -97,6 +101,9 @@ typedef struct Statement
 {
     StmtType type;
     ASTIndex next;
+
+    /* Byte offset of the token that started this node. */
+    u32 Offset;
 
     /* Filled by the semantic pass; Type.SignatureIndex identifies a function
      * definition when type is StmtFunction. */

@@ -87,15 +87,11 @@ IsBlockEnd(ReservedToken Type)
 internal void
 ErrorAt(Parser *P, Token *Tok, char *Format, ...)
 {
-    P->HadError = 1;
-    fprintf(stderr, "%s:%u:%u: error: ", P->Source->FileName, Tok->line + 1,
-            Tok->column + 1);
-
     va_list Args;
     va_start(Args, Format);
-    vfprintf(stderr, Format, Args);
+    PushMessageV(P->Log, Msg_Error, P->Source, Tok->offset, "parse", Format,
+                 Args);
     va_end(Args);
-    fprintf(stderr, "\n");
 }
 
 internal void
@@ -138,10 +134,11 @@ Expect(Parser *P, ReservedToken Type, char *What)
 }
 
 internal ASTIndex
-AllocExpr(Parser *P, Expr Init)
+AllocExpr(Parser *P, Expr Init, Token At)
 {
     Assert(P->ExprLen < P->ExprCap);
     Init.next = ASTNone;
+    Init.Offset = At.offset;
     Init.SymbolIndex = ASTNone;
     ASTIndex Result = P->ExprLen++;
     P->ExprPool[Result] = Init;
@@ -149,10 +146,11 @@ AllocExpr(Parser *P, Expr Init)
 }
 
 internal ASTIndex
-AllocStmt(Parser *P, Statement Init)
+AllocStmt(Parser *P, Statement Init, Token At)
 {
     Assert(P->StmtLen < P->StmtCap);
     Init.next = ASTNone;
+    Init.Offset = At.offset;
     Init.SymbolIndex = ASTNone;
     ASTIndex Result = P->StmtLen++;
     P->StmtPool[Result] = Init;
@@ -216,7 +214,7 @@ ParseNilPrefix(Parser *P, Token Tok)
     (void)Tok;
     Expr Init = {0};
     Init.type = ExprNil;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -225,7 +223,7 @@ ParseBooleanPrefix(Parser *P, Token Tok)
     Expr Init = {0};
     Init.type = ExprBoolean;
     Init.as.boolean = (Tok.tok_type == TK_TRUE);
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -234,7 +232,7 @@ ParseNumberPrefix(Parser *P, Token Tok)
     Expr Init = {0};
     Init.type = ExprNumber;
     Init.as.num = Tok.info.num;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -243,7 +241,7 @@ ParseStringPrefix(Parser *P, Token Tok)
     Expr Init = {0};
     Init.type = ExprString;
     Init.as.string = Tok.info.str;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -252,7 +250,7 @@ ParseNamePrefix(Parser *P, Token Tok)
     Expr Init = {0};
     Init.type = ExprVariable;
     Init.as.variable = Tok.info.str;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -268,7 +266,7 @@ ParseGroupPrefix(Parser *P, Token Tok)
     Expr Init = {0};
     Init.type = ExprGroup;
     Init.as.group = Inner;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -279,7 +277,7 @@ ParseUnaryPrefix(Parser *P, Token Tok)
     Init.type = ExprUnary;
     Init.as.unary.op = Tok.tok_type;
     Init.as.unary.l_expr = Operand;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Tok));
 }
 
 internal ASTIndex
@@ -291,7 +289,7 @@ ParseBinaryInfix(Parser *P, ASTIndex Left, Token Op)
     Init.as.binary.op = Op.tok_type;
     Init.as.binary.l_expr = Left;
     Init.as.binary.r_expr = Right;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Op));
 }
 
 internal ASTIndex
@@ -339,7 +337,7 @@ ParseCallInfix(Parser *P, ASTIndex Left, Token Op)
     Init.as.call.callee = Left;
     Init.as.call.i_arg = First;
     Init.as.call.argc = Argc;
-    return(AllocExpr(P, Init));
+    return(AllocExpr(P, Init, Op));
 }
 
 //
@@ -349,6 +347,7 @@ ParseCallInfix(Parser *P, ASTIndex Left, Token Op)
 internal ASTIndex
 ParseNameStatement(Parser *P)
 {
+    Token Start = P->Curr;
     ASTIndex ExprIndex = ParseExpression(P, PREC_ASSIGN);
     if(ExprIndex == ASTNone)
     {
@@ -369,7 +368,7 @@ ParseNameStatement(Parser *P)
         Init.type = StmtAssignment;
         Init.as.assign.name = Name;
         Init.as.assign.value = Value;
-        return(AllocStmt(P, Init));
+        return(AllocStmt(P, Init, Start));
     }
 
     if(E->type != ExprFuncCall)
@@ -381,12 +380,13 @@ ParseNameStatement(Parser *P)
     Statement Init = {0};
     Init.type = StmtFuncCall;
     Init.as.funccall = ExprIndex;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseLocalStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* local */
     if(P->Curr.tok_type != TK_NAME)
     {
@@ -408,12 +408,13 @@ ParseLocalStatement(Parser *P)
     Init.type = StmtLocalVar;
     Init.as.local_var.name = Name;
     Init.as.local_var.value = Value;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseIfThen(Parser *P)
 {
+    Token Start = P->Curr;
     ASTIndex Cond = ParseExpression(P, PREC_ASSIGN);
     if(!Expect(P, TK_THEN, "'then'"))
     {
@@ -426,7 +427,7 @@ ParseIfThen(Parser *P)
     Init.as.if_stmt.cond = Cond;
     Init.as.if_stmt.block_idx = Body;
     Init.as.if_stmt.next_el = ASTNone;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
@@ -451,6 +452,7 @@ ParseIfStatement(Parser *P)
         LastIf = ElseIfIndex;
     }
 
+    Token ElseTok = P->Curr;
     if(Match(P, TK_ELSE))
     {
         ASTIndex ElseBody = ParseBlock(P);
@@ -459,7 +461,7 @@ ParseIfStatement(Parser *P)
         Init.as.if_stmt.cond = ASTNone; /* ASTNone marks the else arm */
         Init.as.if_stmt.block_idx = ElseBody;
         Init.as.if_stmt.next_el = ASTNone;
-        ASTIndex ElseIndex = AllocStmt(P, Init);
+        ASTIndex ElseIndex = AllocStmt(P, Init, ElseTok);
         GetStatement(P, LastIf)->as.if_stmt.next_el = ElseIndex;
     }
 
@@ -470,6 +472,7 @@ ParseIfStatement(Parser *P)
 internal ASTIndex
 ParseWhileStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* while */
     ASTIndex Cond = ParseExpression(P, PREC_ASSIGN);
     if(!Expect(P, TK_DO, "'do'"))
@@ -484,12 +487,13 @@ ParseWhileStatement(Parser *P)
     Init.as.while_or_repeat_stmt.cond = Cond;
     Init.as.while_or_repeat_stmt.block_idx = Body;
     Init.as.while_or_repeat_stmt.is_repeat_until = 0;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseRepeatStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* repeat */
     ASTIndex Body = ParseBlock(P);
     if(!Expect(P, TK_UNTIL, "'until'"))
@@ -503,12 +507,13 @@ ParseRepeatStatement(Parser *P)
     Init.as.while_or_repeat_stmt.cond = Cond;
     Init.as.while_or_repeat_stmt.block_idx = Body;
     Init.as.while_or_repeat_stmt.is_repeat_until = 1;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseForStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* for */
     if(P->Curr.tok_type != TK_NAME)
     {
@@ -522,7 +527,7 @@ ParseForStatement(Parser *P)
     {
         return(ASTNone);
     }
-    ASTIndex Start = ParseExpression(P, PREC_ASSIGN);
+    ASTIndex StartValue = ParseExpression(P, PREC_ASSIGN);
     if(!Expect(P, TK_COMMA, "','"))
     {
         return(ASTNone);
@@ -545,16 +550,17 @@ ParseForStatement(Parser *P)
     Statement Init = {0};
     Init.type = StmtForLoop;
     Init.as.for_stmt.var = Var;
-    Init.as.for_stmt.start = Start;
+    Init.as.for_stmt.start = StartValue;
     Init.as.for_stmt.end_ = End;
     Init.as.for_stmt.step = Step;
     Init.as.for_stmt.block_idx = Body;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseFunctionStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* function */
     if(P->Curr.tok_type != TK_NAME)
     {
@@ -581,10 +587,11 @@ ParseFunctionStatement(Parser *P)
                 ErrorAt(P, &P->Curr, "expected parameter name");
                 return(ASTNone);
             }
+            Token ParamTok = P->Curr;
             Expr Init = {0};
             Init.type = ExprVariable;
-            Init.as.variable = P->Curr.info.str;
-            ASTIndex Param = AllocExpr(P, Init);
+            Init.as.variable = ParamTok.info.str;
+            ASTIndex Param = AllocExpr(P, Init, ParamTok);
             if(FirstParam == ASTNone)
             {
                 FirstParam = Param;
@@ -617,12 +624,13 @@ ParseFunctionStatement(Parser *P)
     Init.as.func_stmt.first_arg = FirstParam;
     Init.as.func_stmt.argc = ParamCount;
     Init.as.func_stmt.first_stmt = Body;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseReturnStatement(Parser *P)
 {
+    Token Start = P->Curr;
     Advance(P); /* return */
     ASTIndex Value = ASTNone;
     if(!IsBlockEnd(P->Curr.tok_type))
@@ -633,12 +641,13 @@ ParseReturnStatement(Parser *P)
     Statement Init = {0};
     Init.type = StmtReturn;
     Init.as.return_value = Value;
-    return(AllocStmt(P, Init));
+    return(AllocStmt(P, Init, Start));
 }
 
 internal ASTIndex
 ParseStatement(Parser *P)
 {
+    Token Start = P->Curr;
     ASTIndex Result = ASTNone;
     switch(P->Curr.tok_type)
     {
@@ -655,7 +664,7 @@ ParseStatement(Parser *P)
                 Advance(P);
                 Statement Init = {0};
                 Init.type = StmtBreak;
-                Result = AllocStmt(P, Init);
+                Result = AllocStmt(P, Init, Start);
             } break;
         case TK_DO:
             {
@@ -665,7 +674,7 @@ ParseStatement(Parser *P)
                 Statement Init = {0};
                 Init.type = StmtBlock;
                 Init.as.block.block_idx = Body;
-                Result = AllocStmt(P, Init);
+                Result = AllocStmt(P, Init, Start);
             } break;
 
         default:
@@ -704,11 +713,14 @@ ParseBlock(Parser *P)
 }
 
 void
-InitParser(Parser *P, memory_arena *Arena, source_file *Source)
+InitParser(Parser *P, memory_arena *Arena, source_file *Source,
+           message_log *Log)
 {
     ZeroStruct(*P);
     P->Arena = Arena;
     P->Source = Source;
+    P->Log = Log;
+    P->StartErrorCount = Log ? Log->List.ErrorCount : 0;
     InitLexer(&P->LexState, Arena, Source);
 
     /* Worst case: one AST node per source byte. No realloc, ever. */
@@ -749,7 +761,7 @@ ParseChunk(Parser *P)
 b32
 ParserOK(Parser *P)
 {
-    b32 Result = !P->HadError;
+    b32 Result = P->Log ? (P->Log->List.ErrorCount == P->StartErrorCount) : 1;
     return(Result);
 }
 

@@ -52,8 +52,9 @@ typedef size_t memory_index;
 #define Minimum(A, B) (((A) < (B)) ? (A) : (B))
 #define Maximum(A, B) (((A) > (B)) ? (A) : (B))
 
+/* Fatal is only for impossible internal states. Expected failures are data in
+ * the message log below, not control-flow exceptions. */
 void Fatal(char *Format, ...);
-void Error(char *Format, ...);
 
 #define Assert(Expression)                                                     \
 do                                                                         \
@@ -126,6 +127,66 @@ struct source_file
     u32 Size;
 };
 
-source_file ReadEntireFile(memory_arena *Arena, char *FileName);
+/* A readable stand-in for a source file that could not be opened. Reads from
+ * this struct are always valid: the slice is empty and the name is non-null.
+ * It is never written to. */
+global_variable char NilSourceFileName[] = "<nil>";
+global_variable char NilSourceData[] = "";
+global_variable source_file NilSource = {NilSourceFileName, NilSourceData, 0};
+
+//
+// Diagnostics are ordinary data. Every pass appends messages to one log and
+// returns its normal result; callers read the log only when they care. This is
+// the "AND instead of OR" shape: parse result AND messages, not result OR
+// error.
+//
+
+/* Source positions travel as byte offsets. Line/column are computed only when
+ * a message is actually printed, so the lexer and dense AST never pay for
+ * two integers per token or node. */
+#define SourceOffsetNone ((u32)-1)
+
+typedef enum message_kind
+{
+    Msg_Note,
+    Msg_Warning,
+    Msg_Error,
+} message_kind;
+
+typedef struct message
+{
+    struct message *Next;
+    message_kind Kind;
+    string Text;
+    source_file *Source;
+    u32 Offset;
+    char *Origin;
+} message;
+
+typedef struct message_list
+{
+    message *First;
+    message *Last;
+    u32 Count;
+    u32 ErrorCount;
+} message_list;
+
+typedef struct message_log
+{
+    memory_arena *Arena;
+    message_list List;
+    u32 Dropped;
+} message_log;
+
+void InitMessageLog(message_log *Log, memory_arena *Arena);
+void PushMessageV(message_log *Log, message_kind Kind, source_file *Source,
+                  u32 Offset, char *Origin, char *Format, va_list Args);
+void PushMessage(message_log *Log, message_kind Kind, source_file *Source,
+                 u32 Offset, char *Origin, char *Format, ...);
+void PrintMessages(message_log *Log, FILE *Stream);
+b32 MessageLogHasErrors(message_log *Log);
+
+source_file ReadEntireFile(memory_arena *Arena, char *FileName, u32 Size,
+                           message_log *Log);
 
 #endif /* LUA_DEFS_H */

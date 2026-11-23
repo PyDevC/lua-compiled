@@ -91,8 +91,7 @@ typedef struct Token
 {
     ReservedToken tok_type;
     TokenInfo info;
-    u32 line;
-    u32 column;
+    u32 offset; /* byte offset in the source file; line/column are lazy */
 } Token;
 
 /* The cursor owns no memory. Base/End bound the file, At walks it. */
@@ -101,8 +100,6 @@ typedef struct lexer_cursor
     char *Base;
     char *At;
     char *End;
-    u32 Line;
-    u32 Column;
     memory_arena *Arena;
 } lexer_cursor;
 

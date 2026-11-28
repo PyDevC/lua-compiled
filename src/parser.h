@@ -1,10 +1,7 @@
 #pragma once
 
-#include "allocator.h"
 #include "last.h"
 #include "lexer.h"
-
-#define u32 uint32_t
 
 typedef enum {
     PREC_NONE,
@@ -33,19 +30,19 @@ typedef struct Parser
     u32 stmt_len;
 } Parser;
 
-Parser *init_parser(const char *name);
-void destory_parser(Parser *parser);
-void p_advance(Parser *parser);
-int p_match(Parser *parser, ReservedToken tok_type);
+Parser *initParser(const char *name);
+void destroyParser(Parser *parser);
+void pAdvance(Parser *parser);
+int pMatch(Parser *parser, ReservedToken tok_type);
 
-ASTIndex parse_expression(Parser *parser, Precedence prec);
-ASTIndex parse_statement(Parser *parser);
-ASTIndex parse_block(Parser *parser);
+AST_INDEX parseExpression(Parser *parser, Precedence prec);
+AST_INDEX parseStatement(Parser *parser);
+AST_INDEX parseBlock(Parser *parser);
 
-Statement *get_statement(Parser *parser, ASTIndex stmt);
-Expr *get_expression(Parser *parser, ASTIndex expr);
+Statement *getStatement(Parser *parser, AST_INDEX stmt);
+Expr *getExpression(Parser *parser, AST_INDEX expr);
 
 #ifdef PARSER_DEBUG
-void print_expression(Parser *parser, Expr *expr);
-void print_statement(Parser *parser, Statement *stmt);
+void printExpression(Parser *parser, Expr *expr);
+void printStatement(Parser *parser, Statement *stmt);
 #endif // PARSER_DEBUG

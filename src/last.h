@@ -1,12 +1,12 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 
-#define ASTIndex uint32_t
-#define u32 uint32_t
-#define ASTNone ((uint32_t)-1)
+#include "defs.h"
+
+#define AST_INDEX u32
+#define AST_NONE ((u32) - 1)
 
 typedef enum ExprType {
     ExprNil,
@@ -23,33 +23,33 @@ typedef enum ExprType {
 typedef struct Expr
 {
     ExprType type;
-    ASTIndex next;
+    AST_INDEX next;
     union
     {
         bool boolean;
         double number;
         const char *string;
         const char *variable;
-        ASTIndex group;
+        AST_INDEX group;
 
         struct
         {
-            ASTIndex callee;
-            ASTIndex first_arg;
+            AST_INDEX callee;
+            AST_INDEX argv; // First Argument
             u32 argc;
         } call;
 
         struct
         {
             u32 op;
-            ASTIndex l_expr;
+            AST_INDEX l_expr;
         } unary;
 
         struct
         {
             u32 op;
-            ASTIndex l_expr;
-            ASTIndex r_expr;
+            AST_INDEX l_expr;
+            AST_INDEX r_expr;
         } binary;
 
     } as;
@@ -71,67 +71,67 @@ typedef enum {
 typedef struct
 {
     StmtType type;
-    ASTIndex next;
+    AST_INDEX next;
 
     union
     {
         struct
         {
-            ASTIndex first_stmt;
+            AST_INDEX block_idx; // Index of first Statement in the Block
         } block;
 
         struct
         {
             const char *name;
-            ASTIndex value;
+            AST_INDEX value;
         } local_var;
 
         struct
         {
             const char *name;
-            ASTIndex value;
+            AST_INDEX value;
         } assignment;
 
         struct
         {
-            ASTIndex expr;
+            AST_INDEX expr;
         } expr_stmt;
 
         struct
         {
             // Can be if, else or elif
-            ASTIndex condition_expr;
-            ASTIndex first_stmt;
-            ASTIndex next_elif_or_else;
+            AST_INDEX condition_expr;
+            AST_INDEX block_idx; // Index of first Statement in the Block
+            AST_INDEX next_elif_or_else;
         } if_else_stmt;
 
         struct
         {
-            ASTIndex condition_expr;
-            ASTIndex first_stmt;
+            AST_INDEX condition_expr;
+            AST_INDEX block_idx; // Index of first Statement in the Block
             bool is_repat_until;
         } while_or_repeat_stmt;
 
         struct
         {
             const char *var;
-            ASTIndex start_expr;
-            ASTIndex end_expr;
-            ASTIndex step_expr;
-            ASTIndex first_stmt;
+            AST_INDEX start_expr;
+            AST_INDEX end_expr;
+            AST_INDEX step_expr;
+            AST_INDEX block_idx; // Index of first Statement in the Block
         } for_stmt;
 
         struct
         {
-            ASTIndex callee;
+            AST_INDEX callee;
         } funccall;
 
         struct
         {
             const char *name;
-            ASTIndex first_arg;
+            AST_INDEX argv; // First Argument
             u32 argc;
-            ASTIndex first_stmt;
+            AST_INDEX block_idx; // Index of first Statement in the Block
         } func_stmt;
     } as;
 } Statement;

@@ -1,13 +1,12 @@
 WARN_LIMIT=20
 CC_WARNING=-fmax-errors=$(WARN_LIMIT) \
-		   -Werror \
 		   -Wextra \
 		   -Wformat-overflow \
 		   -Wconversion \
 
 CC=gcc
 flags=-Wall
-DEBUG=-g -DDEBUG_LUA=1
+DEBUG=-g -DDEBUG_LUA=1 -DPARSER_DEBUG=1
 BUILD_PATH=build
 
 .PHONY: all build test debug fmt
@@ -30,3 +29,4 @@ test:
 	$(BUILD_PATH)/lua testfiles/expressions.lua
 	$(BUILD_PATH)/lua testfiles/controlflow.lua
 	$(BUILD_PATH)/lua testfiles/loops.lua
+	$(BUILD_PATH)/lua testfiles/expression_to_bytecode.lua

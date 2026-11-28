@@ -5,14 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define is_alpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-#define is_digit(c) (c >= '0' && c <= '9')
-#define is_alnum(c) (is_digit(c) || is_alpha(c))
-#define is_blank(c) (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-#define is_identifier_start(c) (is_alpha(c) || c == '_')
-#define is_identifier(c) (is_alnum(c) || c == '_')
+#define IsAlpha(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+#define IsDigit(c) (c >= '0' && c <= '9')
+#define IsAlnum(c) (IsDigit(c) || IsAlpha(c))
+#define IsBlank(c) (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+#define IsIdentifierStart(c) (IsAlpha(c) || c == '_')
+#define IsIdentifier(c) (IsAlnum(c) || c == '_')
 
-static const KeywordEntry keywords[] = {
+global const KeywordEntry keywords[] = {
     {TK_AND, "and"},       {TK_BREAK, "break"},   {TK_DO, "do"},
     {TK_ELSE, "else"},     {TK_ELSEIF, "elseif"}, {TK_END, "end"},
     {TK_FALSE, "false"},   {TK_FOR, "for"},       {TK_FUNCTION, "function"},
@@ -21,7 +21,7 @@ static const KeywordEntry keywords[] = {
     {TK_REPEAT, "repeat"}, {TK_RETURN, "return"}, {TK_THEN, "then"},
     {TK_TRUE, "true"},     {TK_UNTIL, "until"},   {TK_WHILE, "while"}};
 
-static ReservedToken keyword_type(const char *name)
+internal ReservedToken keywordType(const char *name)
 {
     size_t num_keywords = sizeof(keywords) / sizeof(keywords[0]);
     for (size_t i = 0; i < num_keywords; i++) {
@@ -32,12 +32,12 @@ static ReservedToken keyword_type(const char *name)
     return TK_EMPTY;
 }
 
-static const char *keyword_name(Token token)
+internal const char *keywordName(Token token)
 {
     return keywords[token.tok_type].name;
 }
 
-const char *token_to_string(Token tok)
+const char *tokenToString(Token tok)
 {
     switch (tok.tok_type) {
     case TK_EOF:
@@ -52,6 +52,7 @@ const char *token_to_string(Token tok)
 
     case TK_NUMBER:
         return "[NUMBER]";
+
     case TK_AND:
     case TK_BREAK:
     case TK_DO:
@@ -73,7 +74,7 @@ const char *token_to_string(Token tok)
     case TK_TRUE:
     case TK_UNTIL:
     case TK_WHILE:
-        return keyword_name(tok);
+        return keywordName(tok);
 
     case TK_COMMA:
         return ",";
@@ -122,7 +123,7 @@ const char *token_to_string(Token tok)
     return "";
 }
 
-static char peek_next_char(LexerState *lex_state)
+internal char peekNextChar(LexerState *lex_state)
 {
     size_t location = lex_state->fbuffer->location;
     if (location >= lex_state->fbuffer->fsize) {
@@ -131,9 +132,9 @@ static char peek_next_char(LexerState *lex_state)
     return lex_state->fbuffer->buffer[location];
 }
 
-static char get_next_char(LexerState *lex_state)
+internal char getNextChar(LexerState *lex_state)
 {
-    char c = peek_next_char(lex_state);
+    char c = peekNextChar(lex_state);
     if (c == EOF) {
         return EOF;
     }
@@ -147,25 +148,25 @@ static char get_next_char(LexerState *lex_state)
     return c;
 }
 
-static void skip_whitespace(LexerState *lex_state)
+internal void skipWhiteSpace(LexerState *lex_state)
 {
-    while (is_blank(peek_next_char(lex_state))) {
-        get_next_char(lex_state);
+    while (IsBlank(peekNextChar(lex_state))) {
+        getNextChar(lex_state);
     }
 }
 
-Token make_identifier_token(Token token, LexerState *lex_state)
+Token makeIdentifierToken(Token token, LexerState *lex_state)
 {
     // TODO: set max identifier name limit
     // right now the hard limit is 63 chars
     char lname[64];
     int idx = 0;
-    while (idx < 63 && is_identifier(peek_next_char(lex_state))) {
-        lname[idx] = get_next_char(lex_state);
+    while (idx < 63 && IsIdentifier(peekNextChar(lex_state))) {
+        lname[idx] = getNextChar(lex_state);
         idx++;
     }
     lname[idx] = '\0'; // mark end of string
-    ReservedToken kw = keyword_type(lname);
+    ReservedToken kw = keywordType(lname);
     if (kw != TK_EMPTY) {
         token.tok_type = kw;
         return token;
@@ -176,13 +177,12 @@ Token make_identifier_token(Token token, LexerState *lex_state)
     return token;
 }
 
-Token make_number_token(Token token, LexerState *lex_state)
+Token makeNumberToken(Token token, LexerState *lex_state)
 {
     char lname[64] = "";
     int idx = 0;
-    while (is_digit(peek_next_char(lex_state)) ||
-           peek_next_char(lex_state) == '.') {
-        lname[idx] = get_next_char(lex_state);
+    while (IsDigit(peekNextChar(lex_state)) || peekNextChar(lex_state) == '.') {
+        lname[idx] = getNextChar(lex_state);
         idx++;
     }
     lname[idx] = '\0'; // mark end of string
@@ -191,25 +191,24 @@ Token make_number_token(Token token, LexerState *lex_state)
     return token;
 }
 
-Token make_string_token(Token token, LexerState *lex_state)
+Token makeStringToken(Token token, LexerState *lex_state)
 {
-    get_next_char(lex_state); // Consume opening quote
+    getNextChar(lex_state); // Consume opening quote
 
     char lname[200];
     int idx = 0;
 
-    while (peek_next_char(lex_state) != '"' &&
-           peek_next_char(lex_state) != EOF) {
+    while (peekNextChar(lex_state) != '"' && peekNextChar(lex_state) != EOF) {
         if (idx < (int)sizeof(lname) - 2) {
-            lname[idx++] = get_next_char(lex_state);
+            lname[idx++] = getNextChar(lex_state);
         } else {
             // String too long; consume rest or handle error
-            get_next_char(lex_state);
+            getNextChar(lex_state);
         }
     }
 
-    if (peek_next_char(lex_state) == '"') {
-        get_next_char(lex_state); // Consume closing quote
+    if (peekNextChar(lex_state) == '"') {
+        getNextChar(lex_state); // Consume closing quote
     } else {
         token.tok_type = TK_ILLEGAL;
         return token;
@@ -221,13 +220,13 @@ Token make_string_token(Token token, LexerState *lex_state)
     return token;
 }
 
-Token make_comment_token(Token token, LexerState *lex_state)
+Token makeCommentToken(Token token, LexerState *lex_state)
 {
     char lname[200] = {'-', '-'};
     int idx = 0;
-    get_next_char(lex_state);
-    while (peek_next_char(lex_state) != '\n') {
-        lname[idx] = get_next_char(lex_state);
+    getNextChar(lex_state);
+    while (peekNextChar(lex_state) != '\n') {
+        lname[idx] = getNextChar(lex_state);
         idx++;
     }
     lname[idx] = '\0';
@@ -237,36 +236,36 @@ Token make_comment_token(Token token, LexerState *lex_state)
 }
 
 // This will actually give you the token
-Token lnext_token(LexerState *lex_state)
+Token lnextToken(LexerState *lex_state)
 {
     Token token = {};
     token.tok_type = TK_ILLEGAL;
     token.info.str = NULL;
 
-    skip_whitespace(lex_state);
+    skipWhiteSpace(lex_state);
 
     token.line = lex_state->linenumber;
     token.column = lex_state->colnumber;
 
-    if (peek_next_char(lex_state) == EOF) {
+    if (peekNextChar(lex_state) == EOF) {
         token.tok_type = TK_EOF;
         return token;
     }
 
-    char c = peek_next_char(lex_state);
-    if (is_identifier(c) || c == '"') {
-        if (is_identifier_start(c)) {
-            return make_identifier_token(token, lex_state);
-        } else if (is_digit(c)) {
-            return make_number_token(token, lex_state);
+    char c = peekNextChar(lex_state);
+    if (IsIdentifier(c) || c == '"') {
+        if (IsIdentifierStart(c)) {
+            return makeIdentifierToken(token, lex_state);
+        } else if (IsDigit(c)) {
+            return makeNumberToken(token, lex_state);
         } else if (c == '"') {
-            return make_string_token(token, lex_state);
+            return makeStringToken(token, lex_state);
         }
     }
 
     // clang-format off
     int called_get_next = 0;
-    switch (peek_next_char(lex_state)) {
+    switch (peekNextChar(lex_state)) {
         case ',': { token.tok_type = TK_COMMA; } break;
         case '#': { token.tok_type = TK_HASH; } break;
         case '(': { token.tok_type = TK_LPAREN; } break;
@@ -277,39 +276,39 @@ Token lnext_token(LexerState *lex_state)
         case ']': { token.tok_type = TK_RBRACKET; } break;
         case ';': { token.tok_type = TK_SEMICOLON; } break;
         case '=': { 
-            get_next_char(lex_state);
+            getNextChar(lex_state);
             called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
+            if(peekNextChar(lex_state) == '=') {
+                getNextChar(lex_state);
                 token.tok_type = TK_EQ_EQ;
             } else {
                 token.tok_type = TK_EQ;
             }
         } break;
         case '~': { 
-            get_next_char(lex_state);
+            getNextChar(lex_state);
             called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
+            if(peekNextChar(lex_state) == '=') {
+                getNextChar(lex_state);
                 token.tok_type = TK_NEQ;
             }
         } break;
         case '!': { token.tok_type = TK_BANG; } break;
         case '>': { 
-            get_next_char(lex_state);
+            getNextChar(lex_state);
             called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
+            if(peekNextChar(lex_state) == '=') {
+                getNextChar(lex_state);
                 token.tok_type = TK_GT_EQ;
             } else {
                 token.tok_type = TK_GT;
             }
         } break;
         case '<': { 
-            get_next_char(lex_state);
+            getNextChar(lex_state);
             called_get_next = 1;
-            if(peek_next_char(lex_state) == '=') {
-                get_next_char(lex_state);
+            if(peekNextChar(lex_state) == '=') {
+                getNextChar(lex_state);
                 token.tok_type = TK_LT_EQ;
             } else {
                 token.tok_type = TK_LT;
@@ -317,11 +316,11 @@ Token lnext_token(LexerState *lex_state)
         } break;
         case '+': { token.tok_type = TK_ADD; } break;
         case '-': { 
-            get_next_char(lex_state);
+            getNextChar(lex_state);
             called_get_next = 1;
-            if(peek_next_char(lex_state) == '-') {
-                get_next_char(lex_state);
-                return make_comment_token(token, lex_state);
+            if(peekNextChar(lex_state) == '-') {
+                getNextChar(lex_state);
+                return makeCommentToken(token, lex_state);
             } else {
                 token.tok_type = TK_SUB;
             }
@@ -331,31 +330,22 @@ Token lnext_token(LexerState *lex_state)
     };
 
     if(called_get_next == 0) {
-        get_next_char(lex_state);
+        getNextChar(lex_state);
     }
     return token;
 }
 
-void free_token(Token *token) {
-    if(token->tok_type == TK_NAME || token->tok_type == TK_COMMENT || token->tok_type == TK_STRING) {
-        if(token->info.str != NULL) {
-            free((void*)token->info.str);
-            token->info.str = NULL;
-        }
-    }
-}
-
-Token lpeek_next(LexerState *lex_state)
+Token lpeekNext(LexerState *lex_state)
 {
     if (lex_state->lookahead.tok_type != TK_EMPTY) {
         return lex_state->lookahead;
     }
 
-    lex_state->lookahead = lnext_token(lex_state);
+    lex_state->lookahead = lnextToken(lex_state);
     return lex_state->lookahead;
 }
 
-Token lconsume(LexerState *lex_state)
+Token lConsume(LexerState *lex_state)
 {
     lex_state->lastline = lex_state->linenumber;
     if(lex_state->lookahead.tok_type != TK_EMPTY) {
@@ -363,12 +353,12 @@ Token lconsume(LexerState *lex_state)
         lex_state->lookahead.tok_type = TK_EMPTY;
         lex_state->lookahead.info.str = NULL;
     } else {
-        lex_state->tok = lnext_token(lex_state);
+        lex_state->tok = lnextToken(lex_state);
     }
     return lex_state->tok;
 }
 
-LexerState *init_lexer(const char *filename)
+LexerState *initLexer(const char *filename)
 {
     LexerState *lex_state = (LexerState *)malloc(sizeof(LexerState));
     FileBuffer *fbuffer = (FileBuffer *)malloc(sizeof(FileBuffer));
@@ -408,165 +398,75 @@ LexerState *init_lexer(const char *filename)
     return lex_state;
 }
 
+void destroyLexer(LexerState *lex_state)
+{
+    if (lex_state == NULL) {
+        return;
+    }
+    if (lex_state->fbuffer != NULL) {
+        free((void *)lex_state->fbuffer->buffer);
+        free(lex_state->fbuffer);
+    }
+    free(lex_state);
+}
+
 #ifdef PARSER_DEBUG
-void print_token(ReservedToken tok)
+void printToken(ReservedToken tok)
 {
     switch (tok) {
     /* Keywords */
-    case TK_AND:
-        printf("and");
-        break;
-    case TK_BREAK:
-        printf("break");
-        break;
-    case TK_DO:
-        printf("do");
-        break;
-    case TK_ELSE:
-        printf("else");
-        break;
-    case TK_ELSEIF:
-        printf("elseif");
-        break;
-    case TK_END:
-        printf("end");
-        break;
-    case TK_FALSE:
-        printf("false");
-        break;
-    case TK_FOR:
-        printf("for");
-        break;
-    case TK_FUNCTION:
-        printf("function");
-        break;
-    case TK_IF:
-        printf("if");
-        break;
-    case TK_IN:
-        printf("in");
-        break;
-    case TK_LOCAL:
-        printf("local");
-        break;
-    case TK_NIL:
-        printf("nil");
-        break;
-    case TK_NOT:
-        printf("not");
-        break;
-    case TK_OR:
-        printf("or");
-        break;
-    case TK_REPEAT:
-        printf("repeat");
-        break;
-    case TK_RETURN:
-        printf("return");
-        break;
-    case TK_THEN:
-        printf("then");
-        break;
-    case TK_TRUE:
-        printf("true");
-        break;
-    case TK_UNTIL:
-        printf("until");
-        break;
-    case TK_WHILE:
-        printf("while");
-        break;
-
+    case TK_AND: printf("and"); break;
+    case TK_BREAK: printf("break"); break;
+    case TK_DO: printf("do"); break;
+    case TK_ELSE: printf("else"); break;
+    case TK_ELSEIF: printf("elseif"); break;
+    case TK_END: printf("end"); break;
+    case TK_FALSE: printf("false"); break;
+    case TK_FOR: printf("for"); break;
+    case TK_FUNCTION: printf("function"); break;
+    case TK_IF: printf("if"); break;
+    case TK_IN: printf("in"); break;
+    case TK_LOCAL: printf("local"); break;
+    case TK_NIL: printf("nil"); break;
+    case TK_NOT: printf("not"); break;
+    case TK_OR: printf("or"); break;
+    case TK_REPEAT: printf("repeat"); break;
+    case TK_RETURN: printf("return"); break;
+    case TK_THEN: printf("then"); break;
+    case TK_TRUE: printf("true"); break;
+    case TK_UNTIL: printf("until"); break;
+    case TK_WHILE: printf("while"); break;
     /* Symbols */
-    case TK_COMMA:
-        printf(",");
-        break;
-    case TK_HASH:
-        printf("#");
-        break;
-    case TK_LPAREN:
-        printf("(");
-        break;
-    case TK_RPAREN:
-        printf(")");
-        break;
-    case TK_LBRACE:
-        printf("{");
-        break;
-    case TK_RBRACE:
-        printf("}");
-        break;
-    case TK_LBRACKET:
-        printf("[");
-        break;
-    case TK_RBRACKET:
-        printf("]");
-        break;
-    case TK_SEMICOLON:
-        printf(";");
-        break;
-    case TK_EQ:
-        printf("=");
-        break;
-    case TK_EQ_EQ:
-        printf("==");
-        break;
-    case TK_NEQ:
-        printf("~=");
-        break;
-    case TK_BANG:
-        printf("!");
-        break;
-    case TK_GT:
-        printf(">");
-        break;
-    case TK_GT_EQ:
-        printf(">=");
-        break;
-    case TK_LT:
-        printf("<");
-        break;
-    case TK_LT_EQ:
-        printf("<=");
-        break;
-    case TK_ADD:
-        printf("+");
-        break;
-    case TK_SUB:
-        printf("-");
-        break;
-    case TK_MUL:
-        printf("*");
-        break;
-    case TK_DIV:
-        printf("/");
-        break;
-
+    case TK_COMMA: printf(","); break;
+    case TK_HASH: printf("#"); break;
+    case TK_LPAREN: printf("("); break;
+    case TK_RPAREN: printf(")"); break;
+    case TK_LBRACE: printf("{"); break;
+    case TK_RBRACE: printf("}"); break;
+    case TK_LBRACKET: printf("["); break;
+    case TK_RBRACKET: printf("]"); break;
+    case TK_SEMICOLON: printf(";"); break;
+    case TK_EQ: printf("="); break;
+    case TK_EQ_EQ: printf("=="); break;
+    case TK_NEQ: printf("~="); break;
+    case TK_BANG: printf("!"); break;
+    case TK_GT: printf(">"); break;
+    case TK_GT_EQ: printf(">="); break;
+    case TK_LT: printf("<"); break;
+    case TK_LT_EQ: printf("<="); break;
+    case TK_ADD: printf("+"); break;
+    case TK_SUB: printf("-"); break;
+    case TK_MUL: printf("*"); break;
+    case TK_DIV: printf("/"); break;
     /* Types & Special */
-    case TK_NUMBER:
-        printf("<number>");
-        break;
-    case TK_STRING:
-        printf("<string>");
-        break;
-    case TK_NAME:
-        printf("<name>");
-        break;
-    case TK_ILLEGAL:
-        printf("<illegal>");
-        break;
-    case TK_EOF:
-        printf("<eof>");
-        break;
-    case TK_EMPTY:
-        printf("<empty>");
-        break;
-    case TK_COMMENT:
-        printf("<comment>");
-        break;
-    default:
-        printf("?");
-        break;
+    case TK_NUMBER: printf("<number>"); break;
+    case TK_STRING: printf("<string>"); break;
+    case TK_NAME: printf("<name>"); break;
+    case TK_ILLEGAL: printf("<illegal>"); break;
+    case TK_EOF: printf("<eof>"); break;
+    case TK_EMPTY: printf("<empty>"); break;
+    case TK_COMMENT: printf("<comment>"); break;
+    default: printf("?"); break;
     }
 }
 

@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "defs.h"
+
 /* FileBuffer loads the entire file into the buffer with file info */
 typedef struct
 {
@@ -119,22 +121,23 @@ typedef struct LexerState
     size_t lastline;      /* Last line for parsing token */
 } LexerState;
 
-LexerState *init_lexer(const char *filename);
+LexerState *initLexer(const char *filename);
+void destroyLexer(LexerState *lex_state);
 
 /*
  * Return the lex_state->tok, and consume the lookahead if not consumed
  */
-Token lconsume(LexerState *lex_state);
+Token lConsume(LexerState *lex_state);
 
 /*
  * Return the lookahead token and move forward in buffer
  */
-Token lpeek_next(LexerState *lex_state);
-const char *token_to_string(Token token);
+Token lpeekNext(LexerState *lex_state);
+const char *tokenToString(Token token);
 
 #ifdef PARSER_DEBUG
 /*
  * Print the reserved token type as chars
  */
-void print_token(ReservedToken tok_type);
+void printToken(ReservedToken tok_type);
 #endif // PARSER_DEBUG

@@ -16,16 +16,16 @@ struct LuaCmdlineParam
 };
 
 // Get output_bin_name
-LuaCmdlineParam get_params();
+LuaCmdlineParam getParams();
 
 // Display Flags in correct format
-void cmd_args_display_flag(char *flagname, char *description);
+void cmdArgsDisplayFlag(char *flagname, char *description);
 
 // Display message on stdout
-void cmd_args_display_msg(char *message);
+void cmdArgsDisplayMsg(char *message);
 
 // setup defines and params for cli args
-void setup_cmdline_args(int argc, char *argv[]);
+void setupCmdlineArgs(int argc, char *argv[]);
 
 // Main display function
-void print_cmdline_usage();
+void printCmdlineUsage();

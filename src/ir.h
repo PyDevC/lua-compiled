@@ -1,24 +1,61 @@
 #pragma once
 
-typedef enum { OP_VAR, OP_CONST, OP_TEMP } OperandType;
+#include "defs.h"
+#include "parser.h"
+
+typedef u32 Register;
+typedef double Literal;
+
+typedef struct Env Env;
+
+typedef enum { REGISTER, LITERAL } CodeType;
+
+typedef enum {
+    CODE_UNKNOWN,
+    CODE_ADD,
+    CODE_SUB,
+    CODE_MUL,
+    CODE_DIV,
+    CODE_MOV
+} ArithOp;
+
+typedef struct OpCode
+{
+    CodeType type;
+    Register dest;
+    union
+    {
+        struct
+        {
+            ArithOp op;
+            Register a;
+            Register b;
+        } arith;
+
+        struct
+        {
+            Literal value;
+        } load;
+    } code;
+} OpCode;
 
 typedef struct
 {
-    OperandType type;
-    union
-    {
-        char *name; // For OP_VAR and OP_TEMP
-        double val; // For OP_CONST
-    } data;
-} IROperand;
+    const char *name;
+    Register reg;
+} AssignResult;
 
-typedef enum { IR_ADD, IR_SUB, IR_MUL, IR_DIV, IR_ASSIGN } IROp;
-
-typedef struct IRInstr
+typedef struct ByteCode
 {
-    IROp op;
-    IROperand dst;
-    IROperand src1;
-    IROperand src2;
-    struct IRInstr *next; // Linked list for the instruction stream
-} IRInstr;
+    OpCode *ops;
+    u32 op_count;
+    u32 op_cap;
+    Register reg;
+    AssignResult *assigns;
+    u32 assign_count;
+    u32 assign_cap;
+} ByteCode;
+
+ByteCode *emitByteCode(Parser *parser, Statement *stmt, Env *env);
+void destroyByteCode(ByteCode *bytecode);
+void printByteCode(ByteCode *bytecode);

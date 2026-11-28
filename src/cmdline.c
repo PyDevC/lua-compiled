@@ -5,7 +5,7 @@
 
 LuaCmdlineParam params;
 
-void setup_define_flags()
+void setupDefineFlags()
 {
     if (params.debug) {
 #define LUA_DEBUG 1
@@ -15,26 +15,26 @@ void setup_define_flags()
     }
 }
 
-LuaCmdlineParam get_params() { return params; }
+LuaCmdlineParam getParams() { return params; }
 
-void cmd_args_display_flag(char *flagname, char *description)
+void cmdArgsDisplayFlag(char *flagname, char *description)
 {
     fprintf(stdout, "  %s \t%s\n", flagname, description);
 }
 
-void cmd_args_display_msg(char *message) { fprintf(stdout, "%s\n", message); }
+void cmdArgsDisplayMsg(char *message) { fprintf(stdout, "%s\n", message); }
 
-void print_cmdline_usage()
+void printCmdlineUsage()
 {
-    cmd_args_display_msg("luac [-flags] filename.lua");
-    cmd_args_display_flag("-o", "name of target binary");
-    cmd_args_display_flag("-c", "execute lua oneline command");
-    cmd_args_display_flag("-h", "display this help");
-    cmd_args_display_flag("-g", "debug lua file");
+    cmdArgsDisplayMsg("luac [-flags] filename.lua");
+    cmdArgsDisplayFlag("-o", "name of target binary");
+    cmdArgsDisplayFlag("-c", "execute lua oneline command");
+    cmdArgsDisplayFlag("-h", "display this help");
+    cmdArgsDisplayFlag("-g", "debug lua file");
     fflush(stdout);
 }
 
-void setup_cmdline_args(int argc, char *argv[])
+void setupCmdlineArgs(int argc, char *argv[])
 {
     int arg = 0;
     for (; arg < argc; arg++) {
@@ -50,7 +50,7 @@ void setup_cmdline_args(int argc, char *argv[])
                     params.mode = CMDLINE;
                 } break;
                 case 'h': {
-                    print_cmdline_usage();
+                    printCmdlineUsage();
                     exit(0);
                 } break;
                 case 'o': {
@@ -60,8 +60,8 @@ void setup_cmdline_args(int argc, char *argv[])
                     params.debug = true;
                 } break;
                 default:
-                    cmd_args_display_msg("flag does not exits");
-                    print_cmdline_usage();
+                    cmdArgsDisplayMsg("flag does not exits");
+                    printCmdlineUsage();
                 };
             }
         } else {
@@ -69,5 +69,5 @@ void setup_cmdline_args(int argc, char *argv[])
             params.mode = LUAFILE;
         }
     }
-    setup_define_flags();
+    setupDefineFlags();
 }
